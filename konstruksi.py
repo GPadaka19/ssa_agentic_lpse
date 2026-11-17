@@ -12,6 +12,7 @@ output/konstruksi/<slug>/<tahun>/, so results of different filters never mix.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import tempfile
 from pathlib import Path
@@ -108,19 +109,36 @@ def filter_key(jenis: str = "semua", min_pagu: float = 0.0,
     return "_".join(parts)
 
 
+def load_cached_rows(full_dir: Path) -> list:
+    """Rows from an earlier list.json; raises FileNotFoundError if none."""
+    cache = full_dir / "list.json"
+    if not cache.exists():
+        raise FileNotFoundError(f"belum ada cache {cache}; jalankan sekali tanpa offline")
+    return json.loads(cache.read_text(encoding="utf-8"))["data"]
+
+
 def run_filtered(agency: dict, kategori: str, tahun: int, jenis: str = "semua",
                  min_pagu: float = 0.0, kata: str | None = None, limit: int = 0,
                  workers: int = spse.DEFAULT_WORKERS, excel: bool = True,
-                 refresh: bool = False, root: Path = spse.OUTPUT_ROOT,
+                 refresh: bool = False, offline: bool = False,
+                 root: Path = spse.OUTPUT_ROOT,
                  cancel=None, progress=None, log=print) -> dict:
-    """List -> filter -> download HTML -> CSV/XLSX for the matching packages."""
+    """List -> filter -> download HTML -> CSV/XLSX for the matching packages.
+
+    offline=True uses the cached list.json and only the HTML already on disk,
+    so it re-exports without touching the network.
+    """
     base, slug = agency["base"], agency["slug"]
     nama = agency["names"][0] if agency["names"] else slug
     full_dir = spse.run_dir(slug, tahun, kategori, root)
     html_dir = full_dir / "html"
 
-    rows = spse.scrape_json(base, slug, kategori, tahun, full_dir,
-                            force=refresh, log=log)
+    if offline:
+        rows = load_cached_rows(full_dir)
+        log(f"offline: memakai {len(rows)} baris dari list.json")
+    else:
+        rows = spse.scrape_json(base, slug, kategori, tahun, full_dir,
+                                force=refresh, log=log)
     keep = filter_rows(rows, kategori, jenis, min_pagu, kata)
     ids = spse.extract_ids(keep, kategori)
     if limit:
@@ -132,11 +150,12 @@ def run_filtered(agency: dict, kategori: str, tahun: int, jenis: str = "semua",
     if not ids:
         return stats
 
-    html_progress = (lambda d, t: progress(d, t, "paket HTML")) if progress else None
-    html_stats = spse.scrape_html(base, kategori, tahun, ids, html_dir,
-                                  workers=workers, cancel=cancel,
-                                  progress=html_progress, log=log)
-    stats["files"] = html_stats["files"]
+    if not offline:
+        html_progress = (lambda d, t: progress(d, t, "paket HTML")) if progress else None
+        html_stats = spse.scrape_html(base, kategori, tahun, ids, html_dir,
+                                      workers=workers, cancel=cancel,
+                                      progress=html_progress, log=log)
+        stats["files"] = html_stats["files"]
     if cancel is not None and cancel.is_set():
         stats["cancelled"] = True
         return stats
@@ -178,6 +197,8 @@ def main() -> int:
     p.add_argument("--workers", type=int, default=spse.DEFAULT_WORKERS)
     p.add_argument("--dry", action="store_true", help="Hanya hitung & tampilkan")
     p.add_argument("--no-excel", action="store_true")
+    p.add_argument("--offline", action="store_true",
+                   help="Export ulang dari cache tanpa network")
     p.add_argument("--refresh", action="store_true",
                    help="Ambil ulang daftar paket dari server (abaikan cache)")
     a = p.parse_args()
@@ -204,7 +225,8 @@ def main() -> int:
 
     stats = run_filtered(agency, a.tipe, tahun, a.jenis, a.min_pagu, a.kata,
                          limit=a.limit, workers=a.workers,
-                         excel=not a.no_excel, refresh=a.refresh)
+                         excel=not a.no_excel, refresh=a.refresh,
+                         offline=a.offline)
     print(f"Selesai: {stats['paket']} paket, {stats['csv_rows']} baris CSV")
     for key in ("csv", "xlsx"):
         if stats.get(key):

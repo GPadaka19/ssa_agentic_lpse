@@ -128,6 +128,28 @@ def test_job_lifecycle(client):
     assert client.get("/jobs/nope").status_code == 404
 
 
+def test_offline_job_skips_network(client, tmp_path, monkeypatch):
+    # No cache yet: the job fails with a clear message instead of scraping.
+    job = wait_job(client, client.post("/jobs", json={
+        "agency": "pu", "tahun": 2026, "offline": True,
+        "konstruksi": {}}).json()["id"])
+    assert job["status"] == "failed" and "cache" in job["error"]
+
+    list_dir = tmp_path / "pu" / "2026" / "tender"
+    list_dir.mkdir(parents=True)
+    (list_dir / "list.json").write_text(json.dumps({"data": ROWS}))
+
+    def boom(*a, **k):
+        raise AssertionError("offline job touched the network")
+    monkeypatch.setattr(spse, "scrape_json", boom)
+    monkeypatch.setattr(spse, "scrape_html", boom)
+    job = wait_job(client, client.post("/jobs", json={
+        "agency": "pu", "tahun": 2026, "offline": True,
+        "konstruksi": {"jenis": "pekerjaan"}}).json()["id"])
+    assert job["status"] == "done", job
+    assert job["result"]["paket"] == 2
+
+
 def test_api_key(tmp_path, network):
     with TestClient(create_app(root=tmp_path, api_key="rahasia")) as c:
         assert c.get("/health").status_code == 200

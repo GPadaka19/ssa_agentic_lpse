@@ -86,6 +86,7 @@ request dari halaman itu otomatis membawa header `X-API-Key`.
 | `limit` | `0` | Khusus `/jobs`: batasi N paket (0 = semua) |
 | `workers` | `8` | Khusus `/jobs`: paralel download HTML (1-16) |
 | `excel` | `true` | Khusus `/jobs`: tulis `.xlsx` juga |
+| `offline` | `false` | Khusus `/jobs`: export ulang dari data yang sudah ada, tanpa network |
 
 ### Status job
 
@@ -110,6 +111,83 @@ curl -s -X POST $B/jobs -H 'Content-Type: application/json' \
 curl -s $B/jobs/b14559526b90                       # progres
 curl -s "$B/jobs/b14559526b90/packages?q=nindya"   # hasil JSON
 curl -OJ $B/jobs/b14559526b90/download/xlsx        # unduh Excel
+```
+
+## Padanan perintah CLI
+
+Siapkan dulu variabel berikut di terminal (key ada di `.env`):
+
+```bash
+B=http://localhost:8080
+K=$(sed -n 's/^SPSE_API_KEY=//p' .env)
+```
+
+| CLI | API |
+|---|---|
+| `spse.py --list-agencies` | `GET /agencies?limit=1000` |
+| `spse.py ... --dry` | `POST /preview` |
+| `spse.py --agency A --tipe T --tahun Y` | `POST /jobs` |
+| `spse.py ... --limit 5` | `POST /jobs` dengan `"limit": 5` |
+| `spse.py ... --skip-json --skip-html` | `POST /jobs` dengan `"offline": true` |
+| `spse.py ... --no-excel` | `POST /jobs` dengan `"excel": false` |
+| `konstruksi.py ... --jenis/--min-pagu/--kata` | field `"konstruksi": {...}` di `/preview` atau `/jobs` |
+| `konstruksi.py ... --refresh` | `"refresh": true` |
+
+```bash
+# Daftar instansi
+curl -s -H "X-API-Key: $K" "$B/agencies?limit=1000"
+
+# Cek jumlah paket saja
+curl -s -X POST $B/preview -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+  -d '{"agency":"jakarta","tipe":"swakelola","tahun":2026}'
+
+# Scrape lengkap (CSV + xlsx masuk ke ./output)
+curl -s -X POST $B/jobs -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+  -d '{"agency":"kemkes","tipe":"tender","tahun":2025}'
+
+# Uji kecil dulu: 5 paket
+curl -s -X POST $B/jobs -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+  -d '{"agency":"kemkes","tipe":"tender","tahun":2025,"limit":5}'
+
+# Export ulang tanpa network
+curl -s -X POST $B/jobs -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+  -d '{"agency":"kemkes","tipe":"tender","tahun":2025,"offline":true}'
+```
+
+Konstruksi:
+
+```bash
+# Hitung paket konstruksi + tampilkan daftar
+curl -s -X POST $B/preview -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+  -d '{"agency":"pu","tahun":2025,"konstruksi":{}}'
+
+# Pekerjaan fisik (kontraktor) dengan pagu >= Rp50 M
+curl -s -X POST $B/jobs -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+  -d '{"agency":"pu","tahun":2025,"konstruksi":{"jenis":"pekerjaan","min_pagu":50}}'
+
+# Per bidang lewat kata kunci
+curl -s -X POST $B/jobs -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+  -d '{"agency":"pu","tahun":2025,"konstruksi":{"kata":"jalan|jembatan|preservasi"}}'
+curl -s -X POST $B/jobs -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+  -d '{"agency":"pu","tahun":2025,"konstruksi":{"kata":"irigasi|bendung|sungai|banjir"}}'
+curl -s -X POST $B/jobs -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+  -d '{"agency":"pu","tahun":2025,"konstruksi":{"kata":"gedung|sekolah|rumah sakit"}}'
+
+# Peluang konsultan (perencanaan, supervisi, MK)
+curl -s -X POST $B/jobs -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+  -d '{"agency":"pu","tahun":2025,"konstruksi":{"jenis":"konsultansi"}}'
+
+# Paket kecil (pengadaan langsung) di pemda
+curl -s -X POST $B/jobs -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+  -d '{"agency":"jatimprov","tipe":"nontender","tahun":2025,"konstruksi":{"jenis":"pekerjaan"}}'
+```
+
+Setiap `POST /jobs` mengembalikan `id`. Lanjutkan dengan:
+
+```bash
+curl -s -H "X-API-Key: $K" $B/jobs/<id>                      # progres
+curl -s -H "X-API-Key: $K" $B/jobs/<id>/packages             # hasil JSON
+curl -s -OJ -H "X-API-Key: $K" $B/jobs/<id>/download/xlsx    # unduh Excel
 ```
 
 ## Bentuk hasil `/jobs/{id}/packages`

@@ -72,6 +72,8 @@ class JobRequest(Target):
     limit: int = Field(0, ge=0, description="Batasi N paket (0 = semua)")
     workers: int = Field(spse.DEFAULT_WORKERS, ge=1, le=16)
     excel: bool = True
+    offline: bool = Field(False, description="Export ulang CSV/XLSX dari data yang "
+                          "sudah ada, tanpa network (= --skip-json --skip-html)")
 
 
 # -- helpers -----------------------------------------------------------------------
@@ -149,14 +151,19 @@ def make_runner(root: Path, agencies: list[dict], manager: JobManager):
                 return konstruksi.run_filtered(
                     agency, tipe, tahun, jenis=f.jenis, min_pagu=f.min_pagu,
                     kata=f.kata, limit=req.limit, workers=req.workers,
-                    excel=req.excel, refresh=req.refresh, root=root,
+                    excel=req.excel, refresh=req.refresh,
+                    offline=req.offline, root=root,
                     cancel=cancel, progress=progress, log=log)
 
             out_dir = spse.run_dir(slug, tahun, tipe, root)
-            rows = spse.scrape_json(agency["base"], slug, tipe, tahun, out_dir,
-                                    force=req.refresh, log=log)
+            if req.offline:
+                rows = konstruksi.load_cached_rows(out_dir)
+            else:
+                rows = spse.scrape_json(agency["base"], slug, tipe, tahun, out_dir,
+                                        force=req.refresh, log=log)
             stats = spse.run_pipeline(
-                agency, tipe, tahun, do_json=False, workers=req.workers,
+                agency, tipe, tahun, do_json=False, do_html=not req.offline,
+                workers=req.workers,
                 excel=req.excel, limit=req.limit, root=root,
                 cancel=cancel, progress=progress, log=log)
             csv_path = out_dir.parent / f"{slug}_{tahun}_{tipe}.csv"
