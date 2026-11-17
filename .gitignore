@@ -44,3 +44,7 @@ make_icons.py
 
 # macOS
 .DS_Store
+
+# Local secrets (SPSE_API_KEY)
+.env
+.env

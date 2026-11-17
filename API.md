@@ -28,9 +28,16 @@ Hasil tersimpan di `output/` di host, sama seperti CLI. CLI tetap bisa dipakai:
 | `SPSE_MAX_JOBS` | `2` | Jumlah job scrape yang berjalan bersamaan; sisanya antre |
 | `SPSE_OUTPUT` | `output` | Root folder output |
 
+Key disimpan di file `.env` (tidak ikut git), dibaca otomatis oleh
+`docker compose`:
+
 ```bash
-SPSE_API_KEY=rahasia docker compose up -d
+echo "SPSE_API_KEY=$(openssl rand -hex 24)" > .env
+docker compose up -d
 ```
+
+Di Swagger UI (`/docs`), klik tombol **Authorize**, isi key sekali, dan semua
+request dari halaman itu otomatis membawa header `X-API-Key`.
 
 ## Endpoint
 

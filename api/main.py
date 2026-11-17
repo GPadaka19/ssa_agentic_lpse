@@ -13,13 +13,15 @@ from __future__ import annotations
 import csv
 import os
 import re
+import secrets
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Security
 from fastapi.responses import FileResponse
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field, field_validator
 
 import konstruksi
@@ -189,8 +191,13 @@ def create_app(root: Path | str | None = None, api_key: str | None = None,
     )
     app.state.manager = manager
 
-    def require_key(x_api_key: str | None = Header(None)) -> None:
-        if api_key and x_api_key != api_key:
+    # Declared as a security scheme so Swagger UI (/docs) shows an Authorize
+    # button that fills the header for every request.
+    key_header = APIKeyHeader(name="X-API-Key", auto_error=False,
+                              description="Isi dengan nilai SPSE_API_KEY")
+
+    def require_key(x_api_key: str | None = Security(key_header)) -> None:
+        if api_key and not secrets.compare_digest(x_api_key or "", api_key):
             raise HTTPException(401, "X-API-Key salah atau tidak ada")
 
     @app.get("/health", tags=["meta"])
