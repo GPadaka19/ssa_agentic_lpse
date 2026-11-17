@@ -41,3 +41,6 @@ html_examples/*_files/
 
 # Icon regeneration helper (local tool, not part of the scraper)
 make_icons.py
+
+# macOS
+.DS_Store

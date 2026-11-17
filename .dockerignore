@@ -3,5 +3,7 @@
 !uv.lock
 !.python-version
 !spse.py
-!all_lpse_urls.csv
 !konstruksi.py
+!all_lpse_urls.csv
+!api/
+api/__pycache__

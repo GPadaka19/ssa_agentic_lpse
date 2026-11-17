@@ -72,6 +72,13 @@ Indonesia, jadi `--agency` bisa dipakai untuk instansi mana pun. Pakai flag
 python spse.py --csv katalog_lain.csv --list-agencies
 ```
 
+## HTTP API
+
+Selain GUI dan CLI, repo ini punya HTTP API (FastAPI) untuk menjalankan scrape
+tanpa terminal, termasuk filter paket konstruksi. Jalankan dengan
+`docker compose up -d --build`, lalu buka `http://localhost:8080/docs`.
+Detail endpoint: `API.md`.
+
 ## Command Options
 
 | Flag | Deskripsi |

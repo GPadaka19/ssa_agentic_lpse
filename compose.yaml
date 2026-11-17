@@ -1,0 +1,14 @@
+services:
+  spse:
+    build: .
+    image: spse-scraper
+    container_name: spse
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./output:/app/output
+    environment:
+      # Set to require an X-API-Key header on every endpoint except /health.
+      SPSE_API_KEY: ${SPSE_API_KEY:-}
+      SPSE_MAX_JOBS: ${SPSE_MAX_JOBS:-2}
+    restart: unless-stopped
