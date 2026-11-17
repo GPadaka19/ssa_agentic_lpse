@@ -22,7 +22,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"
 
 # API server. The CLI still works: docker exec spse python spse.py ...
-# --forwarded-allow-ips: trust X-Forwarded-Proto/Host from the reverse proxy
-# so buka_url links come out as https://<public host>/spse/...
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8080", \
-     "--proxy-headers", "--forwarded-allow-ips", "*"]
+# No --forwarded-allow-ips: uvicorn would then replace the peer address with
+# the leftmost (client-forgeable) X-Forwarded-For entry. api/access.py reads the
+# client IP from the proxy-appended end instead (SPSE_PROXY_HOPS).
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8080"]

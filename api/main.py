@@ -5,10 +5,12 @@ Docs: http://localhost:8080/docs (interactive Swagger UI)
 
 Environment:
   SPSE_OUTPUT        output root (default: output)
-  SPSE_API_KEY       if set, every endpoint except /health needs X-API-Key
+  SPSE_ALLOWED_IPS   IP whitelist (see api/access.py); empty = allow all
+  SPSE_PROXY_HOPS    reverse proxies in front that append X-Forwarded-For (1)
+  SPSE_CLIENT_IP_HEADER  optional trusted header holding the client IP
   SPSE_MAX_JOBS      concurrent scrape jobs (default: 2)
   SPSE_PUBLIC_URL    public base URL used in buka_url links (default: taken
-                     from the request, honouring X-Forwarded-* headers)
+                     from the request, honouring X-Forwarded-Proto/Host)
 """
 from __future__ import annotations
 
@@ -17,20 +19,18 @@ import html
 import json
 import os
 import re
-import secrets
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import (APIRouter, Body, Depends, FastAPI, HTTPException, Query, Request,
-                     Security)
-from fastapi.responses import FileResponse, HTMLResponse
-from fastapi.security import APIKeyHeader
+from fastapi import APIRouter, Body, FastAPI, HTTPException, Query, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 import konstruksi
 import spse
+from api.access import AccessPolicy
 from api.jobs import JobManager
 
 Tipe = Literal["tender", "nontender", "pencatatan", "swakelola", "darurat"]
@@ -238,7 +238,13 @@ def spse_target(path: str, query: str = "") -> str:
 
 
 def public_base(request: Request) -> str:
-    return (os.environ.get("SPSE_PUBLIC_URL") or str(request.base_url)).rstrip("/")
+    """Public origin for links. Behind a TLS-terminating proxy the app itself
+    sees plain http, so prefer the proxy's X-Forwarded-Proto/Host."""
+    if os.environ.get("SPSE_PUBLIC_URL"):
+        return os.environ["SPSE_PUBLIC_URL"].rstrip("/")
+    proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
+    host = (request.headers.get("x-forwarded-host") or "").split(",")[0].strip()
+    return f"{proto or request.url.scheme}://{host or request.url.netloc}"
 
 
 def buka_url(request: Request, sumber_url: str | None) -> str | None:
@@ -283,10 +289,12 @@ def make_runner(root: Path, agencies: list[dict], manager: JobManager):
 
 
 # -- app -----------------------------------------------------------------------------
-def create_app(root: Path | str | None = None, api_key: str | None = None,
+def create_app(root: Path | str | None = None, allowed_ips: str | None = None,
+               proxy_hops: int | None = None, client_ip_header: str | None = None,
                max_jobs: int | None = None, agency_csv: Path | str | None = None) -> FastAPI:
     root = Path(root or os.environ.get("SPSE_OUTPUT", "output"))
-    api_key = api_key if api_key is not None else os.environ.get("SPSE_API_KEY") or None
+    access = AccessPolicy.from_env(allowed_ips, proxy_hops, client_ip_header)
+    print(f"SPSE API: {access.describe()}", flush=True)
     max_jobs = max_jobs or int(os.environ.get("SPSE_MAX_JOBS", "2"))
     agencies = spse.load_agencies(agency_csv or spse.AGENCY_CSV)
     manager = JobManager(root, max_concurrent=max_jobs)
@@ -307,14 +315,29 @@ def create_app(root: Path | str | None = None, api_key: str | None = None,
     )
     app.state.manager = manager
 
-    # Declared as a security scheme so Swagger UI (/docs) shows an Authorize
-    # button that fills the header for every request.
-    key_header = APIKeyHeader(name="X-API-Key", auto_error=False,
-                              description="Isi dengan nilai SPSE_API_KEY")
+    app.state.access = access
 
-    def require_key(x_api_key: str | None = Security(key_header)) -> None:
-        if api_key and not secrets.compare_digest(x_api_key or "", api_key):
-            raise HTTPException(401, "X-API-Key salah atau tidak ada")
+    @app.middleware("http")
+    async def ip_whitelist(request: Request, call_next):
+        """Every path except the public ones (/, /health, /whoami, /spse/...)
+        requires a whitelisted client IP; this includes /docs."""
+        if access.enabled and not access.is_public(request.url.path):
+            ip = access.client_ip(request.client.host if request.client else None,
+                                  request.headers)
+            if not access.allows(ip):
+                return JSONResponse({"detail": f"IP {ip or '?'} tidak diizinkan"},
+                                    status_code=403)
+        return await call_next(request)
+
+    @app.get("/whoami", tags=["meta"])
+    def whoami(request: Request) -> dict:
+        """IP Anda menurut server dan apakah masuk whitelist. Pakai untuk
+        mengecek SPSE_ALLOWED_IPS / SPSE_PROXY_HOPS setelah deploy."""
+        peer = request.client.host if request.client else None
+        ip = access.client_ip(peer, request.headers)
+        return {"ip": ip, "diizinkan": access.allows(ip),
+                "whitelist_aktif": access.enabled, "peer": peer,
+                "x_forwarded_for": request.headers.get("x-forwarded-for")}
 
     @app.get("/", tags=["meta"])
     @app.get("/health", tags=["meta"])
@@ -326,15 +349,15 @@ def create_app(root: Path | str | None = None, api_key: str | None = None,
         """Buka halaman SPSE dengan Referer, supaya tidak "Akses Ditolak".
 
         Ganti `https://spse.inaproc.id/` di link paket dengan
-        `<alamat api>/spse/`. Tanpa API key, supaya bisa diklik dari Excel atau
-        chat; tujuannya selalu spse.inaproc.id, jadi tidak bisa dipakai untuk
+        `<alamat api>/spse/`. Terbuka untuk semua IP, supaya bisa diklik dari
+        Excel atau chat; tujuannya selalu spse.inaproc.id, jadi tidak bisa dipakai untuk
         mengalihkan ke situs lain."""
         target = spse_target(path, request.url.query)
         return HTMLResponse(BOUNCE_PAGE.format(
             href=html.escape(target, quote=True),
             target=json.dumps(target).replace("</", "<\\/")))
 
-    r = APIRouter(dependencies=[Depends(require_key)])
+    r = APIRouter()
 
     @r.get("/categories", tags=["meta"])
     def categories() -> list[dict]:

@@ -25,21 +25,40 @@ Hasil tersimpan di `output/` di host, sama seperti CLI. CLI tetap bisa dipakai:
 
 | Variabel | Default | Arti |
 |---|---|---|
-| `SPSE_API_KEY` | kosong | Kalau diisi, semua endpoint kecuali `/` dan `/health` butuh header `X-API-Key` |
+| `SPSE_ALLOWED_IPS` | kosong | Whitelist IP/CIDR, dipisah koma. Kosong = semua IP diizinkan |
+| `SPSE_PROXY_HOPS` | `1` | Jumlah reverse proxy di depan app yang menambah `X-Forwarded-For`. `0` kalau app diakses langsung tanpa proxy |
+| `SPSE_CLIENT_IP_HEADER` | kosong | Opsional: header dari proxy tepercaya yang berisi IP klien saja, mis. `CF-Connecting-IP` atau `X-Real-IP` |
 | `SPSE_MAX_JOBS` | `2` | Jumlah job scrape yang berjalan bersamaan; sisanya antre |
 | `SPSE_OUTPUT` | `output` | Root folder output |
 | `SPSE_PUBLIC_URL` | dari request | Alamat publik API untuk membentuk `buka_url`, mis. `https://data-spse.latindo.ai` |
 
-Key disimpan di file `.env` (tidak ikut git), dibaca otomatis oleh
-`docker compose`:
+### Akses: whitelist IP
+
+Tidak ada API key. Akses dibatasi berdasarkan IP lewat `SPSE_ALLOWED_IPS`,
+disimpan di `.env` (tidak ikut git) dan dibaca otomatis oleh `docker compose`:
 
 ```bash
-echo "SPSE_API_KEY=$(openssl rand -hex 24)" > .env
-docker compose up -d
+SPSE_ALLOWED_IPS=34.50.127.37,43.157.228.227,43.173.50.220
+SPSE_PROXY_HOPS=1
 ```
 
-Di Swagger UI (`/docs`), klik tombol **Authorize**, isi key sekali, dan semua
-request dari halaman itu otomatis membawa header `X-API-Key`.
+- IP di luar whitelist mendapat `403 {"detail": "IP x.x.x.x tidak diizinkan"}`,
+  termasuk untuk `/docs`.
+- Selalu terbuka untuk semua IP: `/`, `/health`, `/whoami`, dan `/spse/...`
+  (link paket yang diklik dari Excel atau chat; tujuannya hanya
+  `spse.inaproc.id`).
+- `GET /whoami` menampilkan IP Anda menurut server dan apakah diizinkan.
+  Pakai ini setelah deploy untuk memastikan IP terbaca benar.
+- IP klien diambil dari ujung kanan `X-Forwarded-For` (bagian yang ditambahkan
+  proxy), bukan ujung kiri yang bisa dipalsukan pengirim. Kalau `/whoami`
+  menampilkan IP proxy, bukan IP Anda, naikkan `SPSE_PROXY_HOPS` atau isi
+  `SPSE_CLIENT_IP_HEADER`.
+- Server membaca whitelist saat start; setelah mengubah `.env`, jalankan ulang
+  (`docker compose up -d`). Entri yang salah ketik membuat server gagal start,
+  bukan diam-diam memblokir.
+- IP Tailscale (`100.x.x.x`) hanya terlihat oleh server kalau server diakses
+  lewat jaringan Tailscale (IP/MagicDNS tailnet). Akses lewat domain publik
+  dari perangkat yang sama memakai IP publik internet perangkat itu.
 
 ## Endpoint
 
@@ -50,8 +69,9 @@ itu menyaring paket yang namanya mengandung kata "string" (hasilnya 0).
 
 | Method | Path | Fungsi |
 |---|---|---|
-| GET | `/`, `/health` | Cek server hidup (tanpa API key) |
-| GET | `/spse/<path SPSE>` | Buka halaman paket SPSE tanpa "Akses Ditolak" (tanpa API key) |
+| GET | `/`, `/health` | Cek server hidup (terbuka untuk semua IP) |
+| GET | `/whoami` | IP Anda menurut server dan status whitelist (terbuka untuk semua IP) |
+| GET | `/spse/<path SPSE>` | Buka halaman paket SPSE tanpa "Akses Ditolak" (terbuka untuk semua IP) |
 | GET | `/categories` | Daftar tipe dan apakah filter konstruksi tersedia |
 | GET | `/agencies?q=surabaya` | Cari instansi (slug + nama) |
 | GET | `/agencies/{slug-atau-nama}` | Resolve satu instansi |
@@ -113,7 +133,7 @@ ulang request yang sama dan scrape lanjut dari cache HTML.
 B=http://localhost:8080
 
 # Tender gedung/fasad terbaru yang masih berjalan
-curl -s -X POST $B/preview -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+curl -s -X POST $B/preview -H 'Content-Type: application/json' \
   -d '{"agency":"pu","konstruksi":{"kata":"gedung|fasad"},"status":"berjalan","urut":"terbaru","refresh":true}'
 
 # Berapa tender pekerjaan konstruksi >= Rp100 M di PU tahun ini?
@@ -132,11 +152,11 @@ curl -OJ $B/jobs/b14559526b90/download/xlsx        # unduh Excel
 
 ## Padanan perintah CLI
 
-Siapkan dulu variabel berikut di terminal (key ada di `.env`):
+Siapkan dulu variabel berikut di terminal (jalankan dari IP yang ada di
+whitelist):
 
 ```bash
 B=https://data-spse.latindo.ai     # atau http://localhost:8080 untuk lokal
-K=$(sed -n 's/^SPSE_API_KEY=//p' .env)
 ```
 
 | CLI | API |
@@ -152,22 +172,22 @@ K=$(sed -n 's/^SPSE_API_KEY=//p' .env)
 
 ```bash
 # Daftar instansi
-curl -s -H "X-API-Key: $K" "$B/agencies?limit=1000"
+curl -s "$B/agencies?limit=1000"
 
 # Cek jumlah paket saja
-curl -s -X POST $B/preview -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+curl -s -X POST $B/preview -H 'Content-Type: application/json' \
   -d '{"agency":"jakarta","tipe":"swakelola","tahun":2026}'
 
 # Scrape lengkap (CSV + xlsx masuk ke ./output)
-curl -s -X POST $B/jobs -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+curl -s -X POST $B/jobs -H 'Content-Type: application/json' \
   -d '{"agency":"kemkes","tipe":"tender","tahun":2025}'
 
 # Uji kecil dulu: 5 paket
-curl -s -X POST $B/jobs -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+curl -s -X POST $B/jobs -H 'Content-Type: application/json' \
   -d '{"agency":"kemkes","tipe":"tender","tahun":2025,"limit":5}'
 
 # Export ulang tanpa network
-curl -s -X POST $B/jobs -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+curl -s -X POST $B/jobs -H 'Content-Type: application/json' \
   -d '{"agency":"kemkes","tipe":"tender","tahun":2025,"offline":true}'
 ```
 
@@ -175,36 +195,36 @@ Konstruksi:
 
 ```bash
 # Hitung paket konstruksi + tampilkan daftar
-curl -s -X POST $B/preview -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+curl -s -X POST $B/preview -H 'Content-Type: application/json' \
   -d '{"agency":"pu","tahun":2025,"konstruksi":{}}'
 
 # Pekerjaan fisik (kontraktor) dengan pagu >= Rp50 M
-curl -s -X POST $B/jobs -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+curl -s -X POST $B/jobs -H 'Content-Type: application/json' \
   -d '{"agency":"pu","tahun":2025,"konstruksi":{"jenis":"pekerjaan","min_pagu":50}}'
 
 # Per bidang lewat kata kunci
-curl -s -X POST $B/jobs -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+curl -s -X POST $B/jobs -H 'Content-Type: application/json' \
   -d '{"agency":"pu","tahun":2025,"konstruksi":{"kata":"jalan|jembatan|preservasi"}}'
-curl -s -X POST $B/jobs -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+curl -s -X POST $B/jobs -H 'Content-Type: application/json' \
   -d '{"agency":"pu","tahun":2025,"konstruksi":{"kata":"irigasi|bendung|sungai|banjir"}}'
-curl -s -X POST $B/jobs -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+curl -s -X POST $B/jobs -H 'Content-Type: application/json' \
   -d '{"agency":"pu","tahun":2025,"konstruksi":{"kata":"gedung|sekolah|rumah sakit"}}'
 
 # Peluang konsultan (perencanaan, supervisi, MK)
-curl -s -X POST $B/jobs -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+curl -s -X POST $B/jobs -H 'Content-Type: application/json' \
   -d '{"agency":"pu","tahun":2025,"konstruksi":{"jenis":"konsultansi"}}'
 
 # Paket kecil (pengadaan langsung) di pemda
-curl -s -X POST $B/jobs -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+curl -s -X POST $B/jobs -H 'Content-Type: application/json' \
   -d '{"agency":"jatimprov","tipe":"nontender","tahun":2025,"konstruksi":{"jenis":"pekerjaan"}}'
 ```
 
 Setiap `POST /jobs` mengembalikan `id`. Lanjutkan dengan:
 
 ```bash
-curl -s -H "X-API-Key: $K" $B/jobs/<id>                      # progres
-curl -s -H "X-API-Key: $K" $B/jobs/<id>/packages             # hasil JSON
-curl -s -OJ -H "X-API-Key: $K" $B/jobs/<id>/download/xlsx    # unduh Excel
+curl -s $B/jobs/<id>                      # progres
+curl -s $B/jobs/<id>/packages             # hasil JSON
+curl -s -OJ $B/jobs/<id>/download/xlsx    # unduh Excel
 ```
 
 ## Bentuk hasil `/jobs/{id}/packages`
@@ -247,7 +267,7 @@ setelah evaluasi.
   Endpoint ini menyajikan halaman kecil yang langsung pindah ke SPSE lewat
   JavaScript, sehingga browser mengirim Referer. Redirect HTTP biasa tidak
   bisa, karena browser mempertahankan Referer kosong saat mengikuti redirect.
-  Tidak butuh API key dan tujuannya selalu `spse.inaproc.id`. Kalau alamat di
+  Terbuka untuk semua IP dan tujuannya selalu `spse.inaproc.id`. Kalau alamat di
   `buka_url` salah (mis. `http://` di belakang proxy), set `SPSE_PUBLIC_URL`.
   Kolom `buka_url` di CSV/Excel memakai `SPSE_PUBLIC_URL`, default
   `https://data-spse.latindo.ai`. Excel lama tanpa kolom ini bisa dibuat ulang

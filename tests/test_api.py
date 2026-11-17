@@ -58,7 +58,7 @@ def network(monkeypatch):
 
 @pytest.fixture
 def client(tmp_path, network):
-    with TestClient(create_app(root=tmp_path, api_key="")) as c:
+    with TestClient(create_app(root=tmp_path, allowed_ips="")) as c:
         yield c
 
 
@@ -165,8 +165,8 @@ def test_offline_job_skips_network(client, tmp_path, monkeypatch):
 
 
 def test_spse_bounce_page(tmp_path, network):
-    with TestClient(create_app(root=tmp_path, api_key="rahasia")) as c:
-        # No API key needed: links are clicked from Excel / chat.
+    with TestClient(create_app(root=tmp_path, allowed_ips="34.50.127.37")) as c:
+        # Open to every IP: links are clicked from Excel / chat.
         resp = c.get("/spse/pu/lelang/10181495000/pengumumanlelang")
         assert resp.status_code == 200
         assert "text/html" in resp.headers["content-type"]
@@ -190,12 +190,72 @@ def test_buka_url_in_results(client):
     assert pkg["buka_url"] == "http://testserver/spse/pu/lelang/1/pengumumanlelang"
 
 
-def test_api_key(tmp_path, network):
-    with TestClient(create_app(root=tmp_path, api_key="rahasia")) as c:
-        assert c.get("/health").status_code == 200
-        assert c.get("/").status_code == 200
-        assert c.get("/categories").status_code == 401
-        assert c.get("/categories", headers={"X-API-Key": "rahasia"}).status_code == 200
+ALLOWED = "100.80.64.57, 34.50.127.37 43.157.228.227,10.20.0.0/16"
+
+
+def via_proxy(ip):
+    """What one reverse proxy sends: the real client appended last."""
+    return {"X-Forwarded-For": ip}
+
+
+def test_ip_whitelist(tmp_path, network):
+    with TestClient(create_app(root=tmp_path, allowed_ips=ALLOWED)) as c:
+        # Public paths stay open to anyone.
+        for path in ("/", "/health", "/whoami", "/spse/pu/lelang/1/pengumumanlelang"):
+            assert c.get(path, headers=via_proxy("8.8.8.8")).status_code == 200, path
+        # Everything else, /docs included, needs a whitelisted IP.
+        for path in ("/categories", "/jobs", "/docs", "/openapi.json"):
+            resp = c.get(path, headers=via_proxy("8.8.8.8"))
+            assert resp.status_code == 403, path
+            assert "8.8.8.8" in resp.json()["detail"]
+        assert c.get("/categories", headers=via_proxy("34.50.127.37")).status_code == 200
+        assert c.get("/categories", headers=via_proxy("100.80.64.57")).status_code == 200
+        assert c.get("/categories", headers=via_proxy("10.20.5.6")).status_code == 200  # CIDR
+        assert c.post("/preview", json={"agency": "pu"},
+                      headers=via_proxy("8.8.8.8")).status_code == 403
+
+
+def test_forged_forwarded_for_is_ignored(tmp_path, network):
+    with TestClient(create_app(root=tmp_path, allowed_ips=ALLOWED)) as c:
+        # Attacker sends "X-Forwarded-For: <whitelisted>"; the proxy appends the
+        # real address, which is what counts.
+        forged = {"X-Forwarded-For": "34.50.127.37, 8.8.8.8"}
+        assert c.get("/categories", headers=forged).status_code == 403
+        who = c.get("/whoami", headers=forged).json()
+        assert who["ip"] == "8.8.8.8" and who["diizinkan"] is False
+        # No forwarding header: the direct peer (TestClient's "testclient") is
+        # not an IP, so it is refused rather than waved through.
+        assert c.get("/categories").status_code == 403
+
+
+def test_proxy_hops_and_client_ip_header(tmp_path, network):
+    two = {"X-Forwarded-For": "8.8.8.8, 34.50.127.37, 172.16.0.9"}
+    with TestClient(create_app(root=tmp_path, allowed_ips=ALLOWED, proxy_hops=2)) as c:
+        assert c.get("/categories", headers=two).status_code == 200
+    with TestClient(create_app(root=tmp_path, allowed_ips=ALLOWED, proxy_hops=1)) as c:
+        assert c.get("/categories", headers=two).status_code == 403
+    with TestClient(create_app(root=tmp_path, allowed_ips=ALLOWED,
+                               client_ip_header="CF-Connecting-IP")) as c:
+        assert c.get("/categories", headers={"CF-Connecting-IP": "43.157.228.227"}).status_code == 200
+        assert c.get("/categories", headers={"CF-Connecting-IP": "8.8.8.8"}).status_code == 403
+
+
+def test_whitelist_disabled_allows_all(client):
+    assert client.get("/categories", headers=via_proxy("8.8.8.8")).status_code == 200
+    assert client.get("/whoami").json()["whitelist_aktif"] is False
+
+
+def test_invalid_whitelist_entry_fails_fast(tmp_path):
+    with pytest.raises(ValueError, match="100.80.64"):
+        create_app(root=tmp_path, allowed_ips="100.80.64")
+
+
+def test_buka_url_uses_forwarded_proto(client):
+    body = client.post("/preview", json={"agency": "pu", "max_items": 1, "urut": "asli"},
+                       headers={"X-Forwarded-Proto": "https",
+                                "X-Forwarded-Host": "data-spse.latindo.ai"}).json()
+    assert body["packages"][0]["buka_url"] == \
+        "https://data-spse.latindo.ai/spse/pu/lelang/1/pengumumanlelang"
 
 
 def test_swagger_examples_are_valid(client):

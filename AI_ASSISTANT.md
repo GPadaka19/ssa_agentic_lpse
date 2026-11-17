@@ -20,8 +20,9 @@ Prinsip:
 ## 2. Koneksi
 
 - Base URL: `https://data-spse.latindo.ai`
-- Autentikasi: header `X-API-Key: {{SPSE_API_KEY}}` di setiap request, kecuali
-  `/` dan `/health`.
+- Akses: tanpa API key. Server hanya menerima request dari IP yang ada di
+  whitelist; pastikan Anda berjalan dari server/jaringan yang sudah
+  didaftarkan. Cek dengan `GET /whoami` (`"diizinkan": true`).
 - Body request berupa JSON: `Content-Type: application/json`.
 - Spesifikasi lengkap (OpenAPI): `GET /openapi.json`.
 
@@ -204,7 +205,7 @@ Parameter: `q` (cari di nama paket, satker, nama peserta), `urut`
 
 | Respons | Arti | Tindakan |
 |---|---|---|
-| 401 | API key salah/tidak ada | Laporkan ke admin, jangan coba-coba key lain |
+| 403 "IP ... tidak diizinkan" | IP Anda tidak ada di whitelist | Laporkan IP dari `GET /whoami` ke admin; jangan mencoba lewat jalur lain |
 | 404 "Instansi ... tidak ditemukan" | Slug/nama tidak cocok | `GET /agencies?q=` dengan kata lebih pendek |
 | 422 "Filter konstruksi tidak tersedia ..." | Filter dipakai di `swakelola` | Hilangkan field `konstruksi` |
 | 422 "regex tidak valid" | Pola `kata` rusak | Perbaiki, mis. escape tanda kurung |
@@ -229,7 +230,6 @@ di atas Rp50 miliar, lalu siapkan Excel-nya."
 
 ```http
 POST /preview
-X-API-Key: {{SPSE_API_KEY}}
 Content-Type: application/json
 
 {"agency": "pu", "tipe": "tender", "tahun": 2026,
@@ -242,7 +242,6 @@ jumlahnya kecil, langsung jalankan job:
 
 ```http
 POST /jobs
-X-API-Key: {{SPSE_API_KEY}}
 Content-Type: application/json
 
 {"agency": "pu", "tipe": "tender", "tahun": 2026,

@@ -8,7 +8,12 @@ services:
     volumes:
       - ./output:/app/output
     environment:
-      # Set to require an X-API-Key header on every endpoint except /health.
-      SPSE_API_KEY: ${SPSE_API_KEY:-}
+      # IP whitelist (comma separated IPs/CIDRs). Empty = every IP allowed.
+      # /, /health, /whoami and /spse/... stay open to everyone.
+      SPSE_ALLOWED_IPS: ${SPSE_ALLOWED_IPS:-}
+      # Reverse proxies in front that append X-Forwarded-For; 0 = none.
+      SPSE_PROXY_HOPS: ${SPSE_PROXY_HOPS:-1}
+      SPSE_CLIENT_IP_HEADER: ${SPSE_CLIENT_IP_HEADER:-}
+      SPSE_PUBLIC_URL: ${SPSE_PUBLIC_URL:-}
       SPSE_MAX_JOBS: ${SPSE_MAX_JOBS:-2}
     restart: unless-stopped
