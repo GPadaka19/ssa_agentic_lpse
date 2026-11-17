@@ -190,9 +190,10 @@ Parameter: `q` (cari di nama paket, satker, nama peserta), `urut`
 - **Satu paket bisa muncul dua kali** (tender ulang dengan kode berbeda).
 - **Saat memberi link paket, selalu pakai `buka_url`, bukan `sumber_url`.**
   `sumber_url` (link asli SPSE) menampilkan "Akses Ditolak" kalau diklik dari
-  chat, email, atau Excel. `buka_url` lewat API ini dan terbuka normal. File
-  Excel/CSV hasil job juga punya kolom `buka_url` (di Excel berupa hyperlink).
-  Kalau hanya punya `sumber_url`, ganti `https://spse.inaproc.id/` dengan
+  chat, email, atau Excel. `buka_url` lewat API ini dan terbuka normal. Di
+  file Excel/CSV hasil job, kolom `sumber_url` sudah berisi link lewat API
+  (di Excel berupa hyperlink), jadi aman dibagikan apa adanya. Kalau hanya
+  punya link asli, ganti `https://spse.inaproc.id/` dengan
   `https://data-spse.latindo.ai/spse/`.
 - **Jangan menjalankan job besar berulang-ulang.** Maksimal 2 job berjalan
   bersamaan; sisanya antre. Pakai ulang job yang sudah `done` (`GET /jobs`)

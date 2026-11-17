@@ -254,10 +254,11 @@ setelah evaluasi.
 
 - `sumber_url` menolak dibuka langsung ("Akses Ditolak") karena SPSE mewajibkan
   header `Referer`, yang tidak dikirim saat link diklik dari Excel, chat, atau
-  address bar. Pakai `buka_url`: ada di hasil `/preview`,
-  `/jobs/{id}/packages`, dan sebagai kolom di CSV/Excel hasil job (di `.xlsx`
-  berupa hyperlink yang bisa diklik). Atau ganti sendiri
-  `https://spse.inaproc.id/` dengan `<alamat api>/spse/`:
+  address bar. Pakai `buka_url` di hasil `/preview` dan `/jobs/{id}/packages`
+  (di JSON, `sumber_url` tetap link asli). Di CSV/Excel hasil job, kolom
+  `sumber_url` sudah berisi link lewat API (di `.xlsx` berupa hyperlink yang
+  bisa diklik). Atau ganti sendiri `https://spse.inaproc.id/` dengan
+  `<alamat api>/spse/`:
 
   ```
   https://spse.inaproc.id/pu/lelang/10181495000/pengumumanlelang
@@ -269,9 +270,9 @@ setelah evaluasi.
   bisa, karena browser mempertahankan Referer kosong saat mengikuti redirect.
   Terbuka untuk semua IP dan tujuannya selalu `spse.inaproc.id`. Kalau alamat di
   `buka_url` salah (mis. `http://` di belakang proxy), set `SPSE_PUBLIC_URL`.
-  Kolom `buka_url` di CSV/Excel memakai `SPSE_PUBLIC_URL`, default
-  `https://data-spse.latindo.ai`. Excel lama tanpa kolom ini bisa dibuat ulang
-  tanpa network dengan `POST /jobs` + `"offline": true`.
+  Kolom `sumber_url` di CSV/Excel memakai `SPSE_PUBLIC_URL`, default
+  `https://data-spse.latindo.ai`. Excel lama yang masih berisi link asli bisa
+  dibuat ulang tanpa network dengan `POST /jobs` + `"offline": true`.
 - Satu `list.json` per instansi/tahun/tipe dikunci per job, jadi dua job untuk
   data yang sama berjalan bergantian, bukan bersamaan.
 - HTML detail paket di-cache di `output/<slug>/<tahun>/<tipe>/html/` dan

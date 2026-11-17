@@ -563,7 +563,7 @@ def entry_tab_url(base: str, kategori: str, paket_id: str) -> str:
 
 # SPSE answers "Akses Ditolak" to a detail page opened without a Referer, which
 # is what a click from Excel sends. The API's /spse/<path> endpoint bounces the
-# browser to SPSE with a Referer, so exported links point there instead.
+# browser to SPSE with a Referer, so the exported sumber_url points there.
 SPSE_ORIGIN = "https://spse.inaproc.id"
 DEFAULT_PUBLIC_URL = "https://data-spse.latindo.ai"
 
@@ -937,7 +937,7 @@ CSV_COLUMNS = [
     "nama_pemenang", "alamat", "npwp",
     "harga_kontrak", "harga_kontrak_num", "nilai_pdn", "nilai_umk",
     "nilai_realisasi", "nilai_realisasi_num",
-    "sumber_url", "buka_url", "extra_json",
+    "sumber_url", "extra_json",
 ]
 
 
@@ -947,8 +947,8 @@ def build_rows(detail: dict, slug: str, nama_instansi: str, kategori: str,
     base_row = {column: "" for column in CSV_COLUMNS}
     base_row.update({
         "slug": slug, "nama_instansi": nama_instansi, "kategori": kategori,
-        "tahun": tahun, "kode_paket": paket_id, "sumber_url": sumber_url,
-        "buka_url": buka_link(sumber_url),
+        "tahun": tahun, "kode_paket": paket_id,
+        "sumber_url": buka_link(sumber_url) or sumber_url,
     })
 
     extra: dict[str, object] = {}
@@ -1106,7 +1106,7 @@ def export_excel(csv_path: Path, log=print, progress=None,
     workbook = Workbook(write_only=True)
     sheet = workbook.create_sheet("data")
     header: list[str] | None = None
-    link_col: int | None = None  # buka_url, written as a clickable HYPERLINK
+    link_col: int | None = None  # sumber_url, written as a clickable HYPERLINK
     sheets = 1
     in_sheet = 0  # data rows written to the current sheet (header excluded)
     done = 0
@@ -1114,10 +1114,11 @@ def export_excel(csv_path: Path, log=print, progress=None,
         for row in csv.reader(handle, delimiter="|"):
             if header is None:
                 header = row
-                link_col = header.index("buka_url") if "buka_url" in header else None
+                link_col = header.index("sumber_url") if "sumber_url" in header else None
                 sheet.append(row)
             else:
-                if link_col is not None and link_col < len(row) and row[link_col]:
+                if (link_col is not None and link_col < len(row)
+                        and row[link_col].startswith(("http://", "https://"))):
                     url = row[link_col].replace('"', '""')
                     row[link_col] = f'=HYPERLINK("{url}","{url}")'
                 if in_sheet >= rows_per_sheet:

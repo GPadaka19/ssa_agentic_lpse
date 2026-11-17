@@ -135,6 +135,7 @@ def test_job_lifecycle(client):
     assert jalan["nama_disamarkan"] is True and jalan["peserta"] == []
     assert gedung["buka_url"] == "http://testserver/spse/pu/lelang/1/pengumumanlelang"
 
+
     hit = client.get(f"/jobs/{job['id']}/packages", params={"q": "baja"}).json()
     assert hit["total"] == 1
 
@@ -299,3 +300,12 @@ def test_running_job_becomes_interrupted_after_restart(tmp_path):
     manager = JobManager(tmp_path)
     assert manager.get("abc").status == "interrupted"
     manager.shutdown()
+
+
+def test_packages_rebuild_original_link_from_bounce_csv(tmp_path):
+    from api.main import summarize_csv
+    path = tmp_path / "x.csv"
+    write_csv(path, [{"slug": "pu", "kategori": "tender", "kode_paket": "77",
+                   "sumber_url": "https://data-spse.latindo.ai/spse/pu/lelang/77/pengumumanlelang"}])
+    [pkg] = summarize_csv(path)
+    assert pkg["sumber_url"] == "https://spse.inaproc.id/pu/lelang/77/pengumumanlelang"

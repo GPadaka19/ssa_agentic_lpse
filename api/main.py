@@ -168,6 +168,15 @@ def _num(value: str) -> float | None:
         return None
 
 
+def original_link(row: dict) -> str | None:
+    """The plain SPSE URL of a CSV row. The CSV's sumber_url already points at
+    this API's /spse/ bounce page, so rebuild the original from slug/kategori/kode."""
+    slug, kategori, kode = row.get("slug"), row.get("kategori"), row.get("kode_paket")
+    if slug and kode and kategori in spse.CATEGORIES:
+        return spse.entry_tab_url(f"{SPSE_ORIGIN}/{slug}", kategori, kode)
+    return row.get("sumber_url") or None
+
+
 def summarize_csv(path: Path) -> list[dict]:
     """Collapse the one-row-per-participant CSV into one entry per package."""
     packages: dict[str, dict] = {}
@@ -189,7 +198,7 @@ def summarize_csv(path: Path) -> list[dict]:
                     "lokasi": row.get("lokasi"),
                     "sumber_dana": row.get("sumber_dana"),
                     "tanggal_pembuatan": row.get("tanggal_pembuatan_iso") or None,
-                    "sumber_url": row.get("sumber_url"),
+                    "sumber_url": original_link(row),
                     "jumlah_peserta": 0,
                     "nama_disamarkan": False,
                     "peserta": [],
