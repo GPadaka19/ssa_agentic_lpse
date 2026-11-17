@@ -8,19 +8,21 @@ import konstruksi
 import spse
 
 
-def tender_row(kode, nama, jenis, pagu):
+def tender_row(kode, nama, jenis, pagu, status="Tender Sudah Selesai"):
     row = [None] * 16
-    row[0], row[1], row[2], row[4], row[8] = kode, nama, "Kementerian PU", pagu, f"{jenis} - TA 2026"
+    row[0], row[1], row[2], row[3], row[4], row[8] = (
+        kode, nama, "Kementerian PU", status, pagu, f"{jenis} - TA 2026")
     return row
 
 
 ROWS = [
-    tender_row("1", "Pembangunan Gedung Kantor", "Pekerjaan Konstruksi", "143,8 M"),
+    tender_row("1", "Pembangunan Gedung Kantor", "Pekerjaan Konstruksi", "143,8 M",
+               "Penetapan Pemenang"),
     tender_row("2", "Supervisi Gedung Kantor", "Jasa Konsultansi Badan Usaha Konstruksi", "3,3 M"),
     tender_row("3", "Konsultan Keuangan", "Jasa Konsultansi Badan Usaha Non Konstruksi", "1 M"),
     tender_row("4", "Pengadaan Laptop", "Pengadaan Barang", "500 Jt"),
     tender_row("5", "Preservasi Jalan <span class='badge'>Tender Ulang</span>",
-               "Pekerjaan Konstruksi Terintegrasi", "1,6 T"),
+               "Pekerjaan Konstruksi Terintegrasi", "1,6 T", "Tender Batal"),
 ]
 
 
@@ -56,6 +58,7 @@ def test_filter_rejects_swakelola():
 
 def test_filter_key():
     assert konstruksi.filter_key() == "konstruksi"
+    assert konstruksi.filter_key(None, status="berjalan") == "paket_berjalan"
     assert (konstruksi.filter_key("pekerjaan", 50, "fasad|gedung")
             == "konstruksi_pekerjaan_min50M_fasad-gedung")
 
@@ -113,3 +116,29 @@ def test_run_filtered_no_match(tmp_path, mocked_network):
     stats = konstruksi.run_filtered(AGENCY, "tender", 2026, kata="tidakada",
                                     root=tmp_path, log=lambda *a: None)
     assert stats["paket"] == 0 and stats["csv"] is None
+
+
+def test_filter_status():
+    assert ids(konstruksi.filter_rows(ROWS, "tender", status="berjalan")) == ["1"]
+    assert ids(konstruksi.filter_rows(ROWS, "tender", status="batal")) == ["5"]
+    assert ids(konstruksi.filter_rows(ROWS, "tender", status="selesai")) == ["2"]
+
+
+def test_filter_without_jenis_works_for_any_category():
+    assert len(konstruksi.filter_rows(ROWS, "tender", jenis=None)) == 5
+    swakelola = [["9", "Rehab Gedung", "DKI", "66 Jt", "5", "2026", "5", "Paket Sudah Selesai"]]
+    assert ids(konstruksi.filter_rows(swakelola, "swakelola", jenis=None, kata="gedung")) == ["9"]
+
+
+def test_sort_rows():
+    rows = [tender_row("10095208000", "a", "Pekerjaan Konstruksi", "1 M"),
+            tender_row("10181495000", "b", "Pekerjaan Konstruksi", "5 M"),
+            tender_row("4711064", "c", "Pekerjaan Konstruksi", "9 M")]
+    assert ids(konstruksi.sort_rows(rows, "tender", "terbaru")) == ["10181495000", "10095208000", "4711064"]
+    assert ids(konstruksi.sort_rows(rows, "tender", "pagu")) == ["4711064", "10181495000", "10095208000"]
+    assert ids(konstruksi.sort_rows(rows, "tender", "asli")) == ["10095208000", "10181495000", "4711064"]
+
+
+def test_row_summary_status():
+    s = konstruksi.row_summary(ROWS[0], "tender")
+    assert s["status"] == "Penetapan Pemenang" and s["status_grup"] == "berjalan"

@@ -29,6 +29,12 @@ COLS = {
 }
 FILTERABLE = sorted(COLS)
 
+# Short pagu text and current stage/status, for every category.
+PAGU_COL = {"tender": 4, "nontender": 4, "pencatatan": 3, "swakelola": 3, "darurat": 3}
+STATUS_COL = {"tender": 3, "nontender": 3, "pencatatan": 8, "swakelola": 7, "darurat": 7}
+STATUS_CHOICES = ["semua", "berjalan", "selesai", "batal"]
+URUT_CHOICES = ["terbaru", "pagu", "asli"]
+
 JENIS = {
     # Physical works: Pekerjaan Konstruksi (+ Terintegrasi)
     "pekerjaan": lambda j: j.startswith("pekerjaan konstruksi"),
@@ -60,46 +66,80 @@ def _cell(row: list, index: int | None) -> str:
     return spse.clean_text(spse.strip_tags(str(row[index])))
 
 
+def status_group(text: str) -> str:
+    """Bucket the SPSE stage text: batal (cancelled/failed), selesai, berjalan."""
+    t = text.lower()
+    if "batal" in t or "gagal" in t:
+        return "batal"
+    if "selesai" in t:
+        return "selesai"
+    return "berjalan"
+
+
+def _kode_num(row: list, kategori: str) -> int:
+    kode = _cell(row, spse.CATEGORIES[kategori]["id_index"])
+    return int(kode) if kode.isdigit() else 0
+
+
+def sort_rows(rows: list, kategori: str, urut: str = "terbaru") -> list:
+    """terbaru: highest kode first (SPSE codes are issued sequentially, so this
+    is newest-created first); pagu: largest pagu first; asli: server order."""
+    if urut == "terbaru":
+        return sorted(rows, key=lambda r: _kode_num(r, kategori), reverse=True)
+    if urut == "pagu":
+        return sorted(rows, key=lambda r: pagu_short(_cell(r, PAGU_COL[kategori])),
+                      reverse=True)
+    return list(rows)
+
+
 def row_summary(row: list, kategori: str) -> dict:
     """Short, JSON-friendly view of one list.json row."""
-    cols = COLS.get(kategori, {"pagu": 3})
     id_index = spse.CATEGORIES[kategori]["id_index"]
-    pagu_text = _cell(row, cols["pagu"])
+    pagu_text = _cell(row, PAGU_COL[kategori])
+    status = _cell(row, STATUS_COL[kategori])
     return {
         "kode": _cell(row, id_index),
         "nama": _cell(row, 1),
         "instansi": _cell(row, 2),
-        "jenis": _cell(row, cols.get("jenis")).split(" - TA")[0] or None,
+        "jenis": _cell(row, COLS.get(kategori, {}).get("jenis")).split(" - TA")[0] or None,
         "pagu": pagu_text,
         "pagu_num": pagu_short(pagu_text) or None,
+        "status": status or None,
+        "status_grup": status_group(status) if status else None,
     }
 
 
-def filter_rows(rows: list, kategori: str, jenis: str = "semua",
-                min_pagu: float = 0.0, kata: str | None = None) -> list:
-    """Keep construction rows. min_pagu is in miliar rupiah; kata is a regex."""
-    if kategori not in COLS:
+def filter_rows(rows: list, kategori: str, jenis: str | None = "semua",
+                min_pagu: float = 0.0, kata: str | None = None,
+                status: str = "semua") -> list:
+    """Keep matching rows. jenis=None skips the construction check (any
+    category); min_pagu is in miliar rupiah; kata is a regex; status is one of
+    STATUS_CHOICES."""
+    if jenis is not None and kategori not in COLS:
         raise ValueError(f"kategori '{kategori}' tidak punya kolom jenis pengadaan")
-    cols = COLS[kategori]
     pattern = re.compile(kata, re.I) if kata else None
     keep = []
     for row in rows:
-        if not JENIS[jenis](_cell(row, cols["jenis"]).lower()):
+        if jenis is not None and not JENIS[jenis](_cell(row, COLS[kategori]["jenis"]).lower()):
             continue
-        if pagu_short(_cell(row, cols["pagu"])) < min_pagu * 1e9:
+        if min_pagu and pagu_short(_cell(row, PAGU_COL[kategori])) < min_pagu * 1e9:
             continue
         if pattern and not pattern.search(_cell(row, 1)):
+            continue
+        if status != "semua" and status_group(_cell(row, STATUS_COL[kategori])) != status:
             continue
         keep.append(row)
     return keep
 
 
-def filter_key(jenis: str = "semua", min_pagu: float = 0.0,
-               kata: str | None = None) -> str:
+def filter_key(jenis: str | None = "semua", min_pagu: float = 0.0,
+               kata: str | None = None, status: str = "semua") -> str:
     """Filename-safe name for one filter combination."""
-    parts = ["konstruksi"]
-    if jenis != "semua":
+    parts = ["konstruksi" if jenis is not None else "paket"]
+    if jenis not in (None, "semua"):
         parts.append(jenis)
+    if status != "semua":
+        parts.append(status)
     if min_pagu:
         parts.append(f"min{min_pagu:g}M")
     if kata:
@@ -117,8 +157,9 @@ def load_cached_rows(full_dir: Path) -> list:
     return json.loads(cache.read_text(encoding="utf-8"))["data"]
 
 
-def run_filtered(agency: dict, kategori: str, tahun: int, jenis: str = "semua",
-                 min_pagu: float = 0.0, kata: str | None = None, limit: int = 0,
+def run_filtered(agency: dict, kategori: str, tahun: int, jenis: str | None = "semua",
+                 min_pagu: float = 0.0, kata: str | None = None,
+                 status: str = "semua", urut: str = "terbaru", limit: int = 0,
                  workers: int = spse.DEFAULT_WORKERS, excel: bool = True,
                  refresh: bool = False, offline: bool = False,
                  root: Path = spse.OUTPUT_ROOT,
@@ -126,7 +167,8 @@ def run_filtered(agency: dict, kategori: str, tahun: int, jenis: str = "semua",
     """List -> filter -> download HTML -> CSV/XLSX for the matching packages.
 
     offline=True uses the cached list.json and only the HTML already on disk,
-    so it re-exports without touching the network.
+    so it re-exports without touching the network. Rows are ordered by urut
+    before limit applies, so limit=5 with urut=terbaru takes the 5 newest.
     """
     base, slug = agency["base"], agency["slug"]
     nama = agency["names"][0] if agency["names"] else slug
@@ -139,11 +181,12 @@ def run_filtered(agency: dict, kategori: str, tahun: int, jenis: str = "semua",
     else:
         rows = spse.scrape_json(base, slug, kategori, tahun, full_dir,
                                 force=refresh, log=log)
-    keep = filter_rows(rows, kategori, jenis, min_pagu, kata)
+    keep = sort_rows(filter_rows(rows, kategori, jenis, min_pagu, kata, status),
+                     kategori, urut)
     ids = spse.extract_ids(keep, kategori)
     if limit:
         ids = ids[:limit]
-    log(f"{slug} {kategori} {tahun}: {len(rows)} paket -> {len(ids)} paket konstruksi")
+    log(f"{slug} {kategori} {tahun}: {len(rows)} paket -> {len(ids)} paket terpilih")
 
     stats = {"total": len(rows), "paket": len(ids), "files": 0,
              "csv_rows": 0, "csv": None, "xlsx": None, "cancelled": False}
@@ -161,7 +204,7 @@ def run_filtered(agency: dict, kategori: str, tahun: int, jenis: str = "semua",
         return stats
 
     out_dir = root / "konstruksi" / slug / str(tahun)
-    csv_path = out_dir / f"{slug}_{tahun}_{kategori}_{filter_key(jenis, min_pagu, kata)}.csv"
+    csv_path = out_dir / f"{slug}_{tahun}_{kategori}_{filter_key(jenis, min_pagu, kata, status)}.csv"
     csv_progress = (lambda d, t: progress(d, t, "paket CSV")) if progress else None
     # export_csv walks every folder in a directory; give it a throwaway view
     # holding only the selected packages so other cached packages stay out.
@@ -193,6 +236,9 @@ def main() -> int:
     p.add_argument("--min-pagu", type=float, default=0,
                    help="Pagu minimum dalam miliar rupiah, mis. 1 = Rp1 M")
     p.add_argument("--kata", help="Kata kunci di nama paket, mis. jalan|irigasi")
+    p.add_argument("--status", choices=STATUS_CHOICES, default="semua",
+                   help="berjalan = tender belum selesai/batal")
+    p.add_argument("--urut", choices=URUT_CHOICES, default="terbaru")
     p.add_argument("--limit", type=int, default=0)
     p.add_argument("--workers", type=int, default=spse.DEFAULT_WORKERS)
     p.add_argument("--dry", action="store_true", help="Hanya hitung & tampilkan")
@@ -213,18 +259,19 @@ def main() -> int:
         full_dir = spse.run_dir(agency["slug"], tahun, a.tipe)
         rows = spse.scrape_json(agency["base"], agency["slug"], a.tipe, tahun,
                                 full_dir, force=a.refresh)
-        keep = filter_rows(rows, a.tipe, a.jenis, a.min_pagu, a.kata)
+        keep = sort_rows(filter_rows(rows, a.tipe, a.jenis, a.min_pagu, a.kata,
+                                     a.status), a.tipe, a.urut)
         print(f"{agency['slug']} {a.tipe} {tahun}: {len(rows)} paket -> "
               f"{len(keep)} paket konstruksi ({a.jenis})")
         for row in keep[:30]:
             s = row_summary(row, a.tipe)
-            print(f"  {s['kode']}  {s['pagu']:>9}  {s['nama'][:90]}")
+            print(f"  {s['kode']}  {s['pagu']:>9}  {s['status_grup'] or '':8}  {s['nama'][:80]}")
         if len(keep) > 30:
             print(f"  ... dan {len(keep) - 30} lainnya")
         return 0
 
     stats = run_filtered(agency, a.tipe, tahun, a.jenis, a.min_pagu, a.kata,
-                         limit=a.limit, workers=a.workers,
+                         status=a.status, urut=a.urut, limit=a.limit, workers=a.workers,
                          excel=not a.no_excel, refresh=a.refresh,
                          offline=a.offline)
     print(f"Selesai: {stats['paket']} paket, {stats['csv_rows']} baris CSV")

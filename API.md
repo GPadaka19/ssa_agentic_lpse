@@ -59,7 +59,7 @@ itu menyaring paket yang namanya mengandung kata "string" (hasilnya 0).
 | POST | `/jobs/{id}/cancel` | Batalkan job |
 | GET | `/jobs/{id}/download/csv` | Unduh CSV hasil |
 | GET | `/jobs/{id}/download/xlsx` | Unduh Excel hasil |
-| GET | `/jobs/{id}/packages?q=&offset=&limit=` | Hasil sebagai JSON, satu entri per paket + peserta |
+| GET | `/jobs/{id}/packages?q=&urut=&offset=&limit=` | Hasil sebagai JSON, satu entri per paket + peserta |
 
 ### Body `/preview` dan `/jobs`
 
@@ -87,6 +87,8 @@ itu menyaring paket yang namanya mengandung kata "string" (hasilnya 0).
 | `konstruksi.min_pagu` | `0` | Pagu minimum dalam miliar rupiah |
 | `konstruksi.kata` | `null` | Regex kata kunci di nama paket (tidak peka huruf besar/kecil) |
 | `refresh` | `false` | Ambil ulang daftar paket dari server; pakai untuk tahun berjalan |
+| `status` | `semua` | `berjalan` (belum selesai, tidak batal/gagal), `selesai`, `batal`. Berlaku untuk semua tipe |
+| `urut` | `terbaru` | `terbaru` (kode paket terbesar dulu = paling baru dibuat), `pagu` (terbesar dulu), `asli` (urutan SPSE). Di `/jobs` menentukan paket mana yang diambil saat `limit` dipakai |
 | `max_items` | `50` | Khusus `/preview`: jumlah paket yang dikembalikan |
 | `limit` | `0` | Khusus `/jobs`: batasi N paket (0 = semua) |
 | `workers` | `8` | Khusus `/jobs`: paralel download HTML (1-16) |
@@ -106,6 +108,10 @@ ulang request yang sama dan scrape lanjut dari cache HTML.
 
 ```bash
 B=http://localhost:8080
+
+# Tender gedung/fasad terbaru yang masih berjalan
+curl -s -X POST $B/preview -H "X-API-Key: $K" -H 'Content-Type: application/json' \
+  -d '{"agency":"pu","konstruksi":{"kata":"gedung|fasad"},"status":"berjalan","urut":"terbaru","refresh":true}'
 
 # Berapa tender pekerjaan konstruksi >= Rp100 M di PU tahun ini?
 curl -s -X POST $B/preview -H 'Content-Type: application/json' \

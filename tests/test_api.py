@@ -91,7 +91,17 @@ def test_preview_filtered(client):
         "agency": "pu", "tahun": 2026,
         "konstruksi": {"jenis": "pekerjaan", "kata": "gedung|jalan"}}).json()
     assert body["total"] == 5 and body["matched"] == 2
-    assert [p["kode"] for p in body["packages"]] == ["1", "5"]
+    assert [p["kode"] for p in body["packages"]] == ["5", "1"]   # terbaru dulu
+
+
+def test_preview_status_and_order(client):
+    body = client.post("/preview", json={
+        "agency": "pu", "konstruksi": {}, "status": "berjalan"}).json()
+    assert [p["kode"] for p in body["packages"]] == ["1"]
+    body = client.post("/preview", json={"agency": "pu", "urut": "asli"}).json()
+    assert [p["kode"] for p in body["packages"]] == ["1", "2", "3", "4", "5"]
+    body = client.post("/preview", json={"agency": "pu", "urut": "pagu", "max_items": 2}).json()
+    assert [p["kode"] for p in body["packages"]] == ["5", "1"]
 
 
 def test_preview_validation(client):
@@ -117,7 +127,9 @@ def test_job_lifecycle(client):
 
     pk = client.get(f"/jobs/{job['id']}/packages").json()
     assert pk["total"] == 2
-    gedung, jalan = pk["items"]
+    by_kode = {p["kode_paket"]: p for p in pk["items"]}
+    gedung, jalan = by_kode["1"], by_kode["5"]
+    assert [p["kode_paket"] for p in pk["items"]] == ["5", "1"]   # terbaru dulu
     assert gedung["jumlah_peserta"] == 2
     assert [p["nama"] for p in gedung["peserta"]] == ["PT Beton Jaya", "PT Baja Abadi"]
     assert jalan["nama_disamarkan"] is True and jalan["peserta"] == []

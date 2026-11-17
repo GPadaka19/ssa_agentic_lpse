@@ -30,6 +30,8 @@ from api.jobs import JobManager
 
 Tipe = Literal["tender", "nontender", "pencatatan", "swakelola", "darurat"]
 Jenis = Literal["semua", "pekerjaan", "konsultansi"]
+Status = Literal["semua", "berjalan", "selesai", "batal"]
+Urut = Literal["terbaru", "pagu", "asli"]
 MASKED_RE = re.compile(r"^Peserta \d+$")
 
 csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
@@ -62,6 +64,10 @@ class Target(BaseModel):
     konstruksi: KonstruksiFilter | None = Field(
         None, description="Isi untuk menyaring paket konstruksi saja")
     refresh: bool = Field(False, description="Ambil ulang daftar paket dari server")
+    status: Status = Field("semua", description="berjalan = belum selesai dan tidak "
+                           "batal/gagal; selesai; batal = batal atau gagal")
+    urut: Urut = Field("terbaru", description="terbaru = paket terbaru dulu "
+                       "(kode paket terbesar); pagu = pagu terbesar dulu; asli = urutan SPSE")
 
 
 class PreviewRequest(Target):
@@ -96,9 +102,10 @@ PREVIEW_EXAMPLES = {
                   "konstruksi": {"jenis": "pekerjaan", "min_pagu": 50}},
     },
     "kata_kunci": {
-        "summary": "Kata kunci: gedung / fasad, ambil ulang dari server",
+        "summary": "Tender gedung / fasad terbaru yang masih berjalan",
         "value": {"agency": "pu", "tipe": "tender", "tahun": 2026,
-                  "konstruksi": {"kata": "gedung|fasad"}, "refresh": True},
+                  "konstruksi": {"kata": "gedung|fasad"}, "status": "berjalan",
+                  "urut": "terbaru", "refresh": True, "max_items": 20},
     },
 }
 
@@ -204,11 +211,13 @@ def make_runner(root: Path, agencies: list[dict], manager: JobManager):
         agency, tahun = _resolve(agencies, req)
         slug, tipe = agency["slug"], req.tipe
         with manager.dataset_lock(slug, tahun, tipe):
-            if req.konstruksi:
+            if req.konstruksi or req.status != "semua" or (req.limit and req.urut != "asli"):
                 f = req.konstruksi
                 return konstruksi.run_filtered(
-                    agency, tipe, tahun, jenis=f.jenis, min_pagu=f.min_pagu,
-                    kata=f.kata, limit=req.limit, workers=req.workers,
+                    agency, tipe, tahun, jenis=f.jenis if f else None,
+                    min_pagu=f.min_pagu if f else 0, kata=f.kata if f else None,
+                    status=req.status, urut=req.urut,
+                    limit=req.limit, workers=req.workers,
                     excel=req.excel, refresh=req.refresh,
                     offline=req.offline, root=root,
                     cancel=cancel, progress=progress, log=log)
@@ -304,10 +313,12 @@ def create_app(root: Path | str | None = None, api_key: str | None = None,
             rows = spse.scrape_json(agency["base"], slug, req.tipe, tahun,
                                     spse.run_dir(slug, tahun, req.tipe, root),
                                     force=req.refresh, log=lambda *a: None)
-        matched = rows
-        if req.konstruksi:
-            f = req.konstruksi
-            matched = konstruksi.filter_rows(rows, req.tipe, f.jenis, f.min_pagu, f.kata)
+        f = req.konstruksi
+        matched = konstruksi.filter_rows(
+            rows, req.tipe, jenis=f.jenis if f else None,
+            min_pagu=f.min_pagu if f else 0, kata=f.kata if f else None,
+            status=req.status)
+        matched = konstruksi.sort_rows(matched, req.tipe, req.urut)
         return {
             "agency": _agency_out(agency), "tipe": req.tipe, "tahun": tahun,
             "total": len(rows), "matched": len(matched),
@@ -357,9 +368,17 @@ def create_app(root: Path | str | None = None, api_key: str | None = None,
     @r.get("/jobs/{job_id}/packages", tags=["jobs"])
     def packages(job_id: str,
                  q: str | None = Query(None, description="Cari di nama paket / satker / peserta"),
+                 urut: Urut = Query("terbaru", description="terbaru = tanggal pembuatan "
+                                    "terbaru dulu; pagu = pagu terbesar dulu; asli = urutan file"),
                  offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=1000)) -> dict:
         """Hasil job sebagai JSON: satu entri per paket beserta pesertanya."""
         items = summarize_csv(_result_file(job_id, "csv"))
+        if urut == "terbaru":
+            items.sort(key=lambda p: (p["tanggal_pembuatan"] or "",
+                                      int(p["kode_paket"]) if p["kode_paket"].isdigit() else 0),
+                       reverse=True)
+        elif urut == "pagu":
+            items.sort(key=lambda p: p["pagu_num"] or 0, reverse=True)
         if q:
             needle = q.lower()
             items = [p for p in items if needle in " ".join(
