@@ -349,6 +349,10 @@ def create_app(root: Path | str | None = None, allowed_ips: str | None = None,
                 "x_forwarded_for": request.headers.get("x-forwarded-for")}
 
     @app.get("/", tags=["meta"])
+    def index() -> dict:  # not "root": that name is the output folder here
+        return {"message": "What the hell are you doing here? There's nothing "
+                           "for you. Get lost."}
+
     @app.get("/health", tags=["meta"])
     def health() -> dict:
         return {"status": "ok"}

@@ -74,7 +74,7 @@ def wait_job(client, job_id, timeout=5):
 
 def test_health_and_meta(client):
     assert client.get("/health").json() == {"status": "ok"}
-    assert client.get("/").json() == {"status": "ok"}
+    assert "Get lost" in client.get("/").json()["message"]
     tipes = {c["tipe"]: c["filter_konstruksi"] for c in client.get("/categories").json()}
     assert tipes["tender"] is True and tipes["swakelola"] is False
 

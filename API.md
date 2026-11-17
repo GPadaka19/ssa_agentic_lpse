@@ -69,7 +69,8 @@ itu menyaring paket yang namanya mengandung kata "string" (hasilnya 0).
 
 | Method | Path | Fungsi |
 |---|---|---|
-| GET | `/`, `/health` | Cek server hidup (terbuka untuk semua IP) |
+| GET | `/health` | Cek server hidup, `{"status":"ok"}` (terbuka untuk semua IP) |
+| GET | `/` | Pesan pengusir untuk pengunjung iseng (terbuka untuk semua IP) |
 | GET | `/whoami` | IP Anda menurut server dan status whitelist (terbuka untuk semua IP) |
 | GET | `/spse/<path SPSE>` | Buka halaman paket SPSE tanpa "Akses Ditolak" (terbuka untuk semua IP) |
 | GET | `/categories` | Daftar tipe dan apakah filter konstruksi tersedia |
