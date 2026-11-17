@@ -12,7 +12,8 @@ docker compose logs -f              # lihat log server
 docker compose down                 # hentikan
 ```
 
-- API: `http://localhost:8080`
+- Server produksi: `https://data-spse.latindo.ai` (docs: `https://data-spse.latindo.ai/docs`)
+- API lokal: `http://localhost:8080`
 - Dokumentasi interaktif (Swagger, bisa dicoba langsung dari browser):
   `http://localhost:8080/docs`
 - Tanpa Docker: `uv run uvicorn api.main:app --port 8080`
@@ -27,7 +28,7 @@ Hasil tersimpan di `output/` di host, sama seperti CLI. CLI tetap bisa dipakai:
 | `SPSE_API_KEY` | kosong | Kalau diisi, semua endpoint kecuali `/` dan `/health` butuh header `X-API-Key` |
 | `SPSE_MAX_JOBS` | `2` | Jumlah job scrape yang berjalan bersamaan; sisanya antre |
 | `SPSE_OUTPUT` | `output` | Root folder output |
-| `SPSE_PUBLIC_URL` | dari request | Alamat publik API untuk membentuk `buka_url`, mis. `https://ssa-agentic-lpse.cgk.apps.skalo.cloud` |
+| `SPSE_PUBLIC_URL` | dari request | Alamat publik API untuk membentuk `buka_url`, mis. `https://data-spse.latindo.ai` |
 
 Key disimpan di file `.env` (tidak ikut git), dibaca otomatis oleh
 `docker compose`:
@@ -134,7 +135,7 @@ curl -OJ $B/jobs/b14559526b90/download/xlsx        # unduh Excel
 Siapkan dulu variabel berikut di terminal (key ada di `.env`):
 
 ```bash
-B=http://localhost:8080
+B=https://data-spse.latindo.ai     # atau http://localhost:8080 untuk lokal
 K=$(sed -n 's/^SPSE_API_KEY=//p' .env)
 ```
 
@@ -239,7 +240,7 @@ setelah evaluasi.
 
   ```
   https://spse.inaproc.id/pu/lelang/10181495000/pengumumanlelang
-  https://ssa-agentic-lpse.cgk.apps.skalo.cloud/spse/pu/lelang/10181495000/pengumumanlelang
+  https://data-spse.latindo.ai/spse/pu/lelang/10181495000/pengumumanlelang
   ```
 
   Endpoint ini menyajikan halaman kecil yang langsung pindah ke SPSE lewat

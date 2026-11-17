@@ -19,7 +19,7 @@ Prinsip:
 
 ## 2. Koneksi
 
-- Base URL: `https://ssa-agentic-lpse.cgk.apps.skalo.cloud`
+- Base URL: `https://data-spse.latindo.ai`
 - Autentikasi: header `X-API-Key: {{SPSE_API_KEY}}` di setiap request, kecuali
   `/` dan `/health`.
 - Body request berupa JSON: `Content-Type: application/json`.
@@ -192,7 +192,7 @@ Parameter: `q` (cari di nama paket, satker, nama peserta), `urut`
   chat, email, atau Excel. `buka_url` lewat API ini dan terbuka normal. Kalau
   hanya punya `sumber_url` (mis. dari file Excel), ganti
   `https://spse.inaproc.id/` dengan
-  `https://ssa-agentic-lpse.cgk.apps.skalo.cloud/spse/`.
+  `https://data-spse.latindo.ai/spse/`.
 - **Jangan menjalankan job besar berulang-ulang.** Maksimal 2 job berjalan
   bersamaan; sisanya antre. Pakai ulang job yang sudah `done` (`GET /jobs`)
   kalau filternya sama dan datanya masih relevan.
