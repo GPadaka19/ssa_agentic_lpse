@@ -1,0 +1,7 @@
+*
+!pyproject.toml
+!uv.lock
+!.python-version
+!spse.py
+!all_lpse_urls.csv
+!konstruksi.py
