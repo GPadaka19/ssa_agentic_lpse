@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import re
 import sys
 import time
@@ -560,6 +561,21 @@ def entry_tab_url(base: str, kategori: str, paket_id: str) -> str:
     return base + CATEGORIES[kategori]["entry_tab"].format(id=paket_id)
 
 
+# SPSE answers "Akses Ditolak" to a detail page opened without a Referer, which
+# is what a click from Excel sends. The API's /spse/<path> endpoint bounces the
+# browser to SPSE with a Referer, so exported links point there instead.
+SPSE_ORIGIN = "https://spse.inaproc.id"
+DEFAULT_PUBLIC_URL = "https://data-spse.latindo.ai"
+
+
+def buka_link(sumber_url: str, public_url: str | None = None) -> str:
+    """https://spse.inaproc.id/x -> <public api>/spse/x; '' if not an SPSE link."""
+    if not sumber_url or not sumber_url.startswith(SPSE_ORIGIN + "/"):
+        return ""
+    base = (public_url or os.environ.get("SPSE_PUBLIC_URL") or DEFAULT_PUBLIC_URL).rstrip("/")
+    return f"{base}/spse/{sumber_url[len(SPSE_ORIGIN) + 1:]}"
+
+
 # Agency catalog: the tracked all_lpse_urls.csv next to this script (repo
 # root), so a fresh clone works with no copy step and regardless of CWD.
 AGENCY_CSV = Path(__file__).resolve().parent / "all_lpse_urls.csv"
@@ -921,7 +937,7 @@ CSV_COLUMNS = [
     "nama_pemenang", "alamat", "npwp",
     "harga_kontrak", "harga_kontrak_num", "nilai_pdn", "nilai_umk",
     "nilai_realisasi", "nilai_realisasi_num",
-    "sumber_url", "extra_json",
+    "sumber_url", "buka_url", "extra_json",
 ]
 
 
@@ -932,6 +948,7 @@ def build_rows(detail: dict, slug: str, nama_instansi: str, kategori: str,
     base_row.update({
         "slug": slug, "nama_instansi": nama_instansi, "kategori": kategori,
         "tahun": tahun, "kode_paket": paket_id, "sumber_url": sumber_url,
+        "buka_url": buka_link(sumber_url),
     })
 
     extra: dict[str, object] = {}
@@ -1078,7 +1095,8 @@ def export_excel(csv_path: Path, log=print, progress=None,
         log("openpyxl belum terpasang; lewati Excel (uv add openpyxl)")
         return None
     try:
-        total = sum(1 for _ in open(csv_path, encoding="utf-8-sig", newline=""))
+        with open(csv_path, encoding="utf-8-sig", newline="") as counting:
+            total = sum(1 for _ in counting)
     except OSError as err:
         log(f"Excel: tidak bisa membaca {csv_path}: {err}")
         return None
@@ -1088,6 +1106,7 @@ def export_excel(csv_path: Path, log=print, progress=None,
     workbook = Workbook(write_only=True)
     sheet = workbook.create_sheet("data")
     header: list[str] | None = None
+    link_col: int | None = None  # buka_url, written as a clickable HYPERLINK
     sheets = 1
     in_sheet = 0  # data rows written to the current sheet (header excluded)
     done = 0
@@ -1095,8 +1114,12 @@ def export_excel(csv_path: Path, log=print, progress=None,
         for row in csv.reader(handle, delimiter="|"):
             if header is None:
                 header = row
+                link_col = header.index("buka_url") if "buka_url" in header else None
                 sheet.append(row)
             else:
+                if link_col is not None and link_col < len(row) and row[link_col]:
+                    url = row[link_col].replace('"', '""')
+                    row[link_col] = f'=HYPERLINK("{url}","{url}")'
                 if in_sheet >= rows_per_sheet:
                     sheets += 1
                     sheet = workbook.create_sheet(f"data_{sheets}")

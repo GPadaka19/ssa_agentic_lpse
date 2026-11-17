@@ -210,7 +210,7 @@ def summarize_csv(path: Path) -> list[dict]:
 
 
 # -- SPSE link bounce -------------------------------------------------------------
-SPSE_ORIGIN = "https://spse.inaproc.id"
+SPSE_ORIGIN = spse.SPSE_ORIGIN
 
 # SPSE answers "Akses Ditolak" to any detail page requested without a Referer
 # header, which is exactly what a click from Excel, a chat message or the
@@ -243,9 +243,7 @@ def public_base(request: Request) -> str:
 
 def buka_url(request: Request, sumber_url: str | None) -> str | None:
     """https://spse.inaproc.id/x -> <this api>/spse/x (opens with a Referer)."""
-    if not sumber_url or not sumber_url.startswith(SPSE_ORIGIN + "/"):
-        return None
-    return public_base(request) + "/spse/" + sumber_url[len(SPSE_ORIGIN) + 1:]
+    return spse.buka_link(sumber_url or "", public_base(request)) or None
 
 
 # -- job runner --------------------------------------------------------------------

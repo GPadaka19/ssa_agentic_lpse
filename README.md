@@ -133,11 +133,17 @@ output/
         └── <slug>_<tahun>_<kategori>.xlsx
 ```
 
-CSV: pipe-delimited (`|`), 35 kolom (`slug`, `nama_instansi`, `kategori`,
+CSV: pipe-delimited (`|`), 36 kolom (`slug`, `nama_instansi`, `kategori`,
 `tahun`, `kode_paket`, `nama_paket`, ..., `nama_pemenang`, `npwp`,
-`harga_kontrak`, `sumber_url`, `extra_json`), UTF-8 dengan BOM agar langsung
-terbuka benar di Excel. Satu paket di-expand menjadi satu baris per
-peserta/pemenang.
+`harga_kontrak`, `sumber_url`, `buka_url`, `extra_json`), UTF-8 dengan BOM
+agar langsung terbuka benar di Excel. Satu paket di-expand menjadi satu baris
+per peserta/pemenang.
+
+`sumber_url` adalah link asli SPSE, yang menampilkan "Akses Ditolak" kalau
+diklik dari Excel (SPSE mewajibkan header Referer). `buka_url` adalah link yang
+sama lewat API (`https://data-spse.latindo.ai/spse/...`) dan terbuka normal;
+di `.xlsx` kolom ini berupa hyperlink yang bisa diklik. Domain bisa diganti
+dengan env `SPSE_PUBLIC_URL`. Lihat `API.md`.
 
 Excel: `.xlsx` dengan isi dan urutan kolom yang sama, ditulis otomatis setelah
 CSV selesai (GUI, CLI, maupun pemakaian oleh AI agent). Baris pertama adalah
