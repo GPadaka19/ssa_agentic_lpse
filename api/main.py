@@ -207,6 +207,7 @@ def create_app(root: Path | str | None = None, api_key: str | None = None,
         if api_key and not secrets.compare_digest(x_api_key or "", api_key):
             raise HTTPException(401, "X-API-Key salah atau tidak ada")
 
+    @app.get("/", tags=["meta"])
     @app.get("/health", tags=["meta"])
     def health() -> dict:
         return {"status": "ok"}

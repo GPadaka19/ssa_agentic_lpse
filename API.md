@@ -24,7 +24,7 @@ Hasil tersimpan di `output/` di host, sama seperti CLI. CLI tetap bisa dipakai:
 
 | Variabel | Default | Arti |
 |---|---|---|
-| `SPSE_API_KEY` | kosong | Kalau diisi, semua endpoint kecuali `/health` butuh header `X-API-Key` |
+| `SPSE_API_KEY` | kosong | Kalau diisi, semua endpoint kecuali `/` dan `/health` butuh header `X-API-Key` |
 | `SPSE_MAX_JOBS` | `2` | Jumlah job scrape yang berjalan bersamaan; sisanya antre |
 | `SPSE_OUTPUT` | `output` | Root folder output |
 
@@ -43,7 +43,7 @@ request dari halaman itu otomatis membawa header `X-API-Key`.
 
 | Method | Path | Fungsi |
 |---|---|---|
-| GET | `/health` | Cek server hidup |
+| GET | `/`, `/health` | Cek server hidup (tanpa API key) |
 | GET | `/categories` | Daftar tipe dan apakah filter konstruksi tersedia |
 | GET | `/agencies?q=surabaya` | Cari instansi (slug + nama) |
 | GET | `/agencies/{slug-atau-nama}` | Resolve satu instansi |

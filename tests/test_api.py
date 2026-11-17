@@ -74,6 +74,7 @@ def wait_job(client, job_id, timeout=5):
 
 def test_health_and_meta(client):
     assert client.get("/health").json() == {"status": "ok"}
+    assert client.get("/").json() == {"status": "ok"}
     tipes = {c["tipe"]: c["filter_konstruksi"] for c in client.get("/categories").json()}
     assert tipes["tender"] is True and tipes["swakelola"] is False
 
@@ -153,6 +154,7 @@ def test_offline_job_skips_network(client, tmp_path, monkeypatch):
 def test_api_key(tmp_path, network):
     with TestClient(create_app(root=tmp_path, api_key="rahasia")) as c:
         assert c.get("/health").status_code == 200
+        assert c.get("/").status_code == 200
         assert c.get("/categories").status_code == 401
         assert c.get("/categories", headers={"X-API-Key": "rahasia"}).status_code == 200
 
