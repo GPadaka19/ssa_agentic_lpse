@@ -1,15 +1,17 @@
 # Panduan Run SPSE dari OrbStack (fokus konstruksi)
 
-Container: `spse` (image `spse-scraper`), selalu hidup, hasil tersimpan di
-folder `output/` di Mac. Semua perintah dijalankan dari Terminal Mac, atau dari
-OrbStack: Containers > `spse` > Terminal (lalu hilangkan awalan
-`docker exec spse`).
+Container: `spse` (image `spse-scraper`), menjalankan HTTP API di
+`http://localhost:8080` (dokumentasi interaktif: `/docs`, detail: `API.md`).
+Hasil tersimpan di folder `output/` di Mac. Perintah CLI di bawah tetap bisa
+dijalankan dari Terminal Mac, atau dari OrbStack: Containers > `spse` >
+Terminal (lalu hilangkan awalan `docker exec spse`).
 
 ## 0. Kelola container
 
 ```bash
-docker ps --filter name=spse        # cek status
-docker start spse / docker stop spse
+docker compose up -d --build        # jalankan / update setelah ubah kode
+docker compose logs -f              # log server API
+docker compose down                 # hentikan
 docker exec -it spse bash           # masuk shell container
 ```
 
@@ -64,7 +66,9 @@ docker exec spse python konstruksi.py --agency jatimprov --tipe nontender --tahu
 docker exec spse python konstruksi.py --agency jakarta --tahun 2026 --jenis pekerjaan --dry
 ```
 
-Hasil: `output/konstruksi/<slug>/<tahun>/<slug>_<tahun>_<tipe>.csv` dan `.xlsx`.
+Hasil: `output/konstruksi/<slug>/<tahun>/<slug>_<tahun>_<tipe>_<filter>.csv` dan `.xlsx`,
+mis. `pu_2026_tender_konstruksi_pekerjaan_min50M_gedung.csv`. Setiap kombinasi
+filter punya file sendiri; HTML paket di-cache bersama di `output/<slug>/<tahun>/<tipe>/html/`.
 
 ## 3. Data lengkap (`spse.py`, tanpa filter)
 
