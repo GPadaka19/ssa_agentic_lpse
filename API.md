@@ -27,6 +27,7 @@ Hasil tersimpan di `output/` di host, sama seperti CLI. CLI tetap bisa dipakai:
 | `SPSE_API_KEY` | kosong | Kalau diisi, semua endpoint kecuali `/` dan `/health` butuh header `X-API-Key` |
 | `SPSE_MAX_JOBS` | `2` | Jumlah job scrape yang berjalan bersamaan; sisanya antre |
 | `SPSE_OUTPUT` | `output` | Root folder output |
+| `SPSE_PUBLIC_URL` | dari request | Alamat publik API untuk membentuk `buka_url`, mis. `https://ssa-agentic-lpse.cgk.apps.skalo.cloud` |
 
 Key disimpan di file `.env` (tidak ikut git), dibaca otomatis oleh
 `docker compose`:
@@ -49,6 +50,7 @@ itu menyaring paket yang namanya mengandung kata "string" (hasilnya 0).
 | Method | Path | Fungsi |
 |---|---|---|
 | GET | `/`, `/health` | Cek server hidup (tanpa API key) |
+| GET | `/spse/<path SPSE>` | Buka halaman paket SPSE tanpa "Akses Ditolak" (tanpa API key) |
 | GET | `/categories` | Daftar tipe dan apakah filter konstruksi tersedia |
 | GET | `/agencies?q=surabaya` | Cari instansi (slug + nama) |
 | GET | `/agencies/{slug-atau-nama}` | Resolve satu instansi |
@@ -229,9 +231,22 @@ setelah evaluasi.
 
 ## Catatan
 
-- `sumber_url` menolak dibuka langsung ("Akses Ditolak") kalau browser tidak
-  mengirim header `Referer`. Buka dari halaman web lain, atau cari kode paket
-  di halaman daftar SPSE.
+- `sumber_url` menolak dibuka langsung ("Akses Ditolak") karena SPSE mewajibkan
+  header `Referer`, yang tidak dikirim saat link diklik dari Excel, chat, atau
+  address bar. Pakai `buka_url` (ada di hasil `/preview` dan
+  `/jobs/{id}/packages`), atau ganti sendiri `https://spse.inaproc.id/` dengan
+  `<alamat api>/spse/`:
+
+  ```
+  https://spse.inaproc.id/pu/lelang/10181495000/pengumumanlelang
+  https://ssa-agentic-lpse.cgk.apps.skalo.cloud/spse/pu/lelang/10181495000/pengumumanlelang
+  ```
+
+  Endpoint ini menyajikan halaman kecil yang langsung pindah ke SPSE lewat
+  JavaScript, sehingga browser mengirim Referer. Redirect HTTP biasa tidak
+  bisa, karena browser mempertahankan Referer kosong saat mengikuti redirect.
+  Tidak butuh API key dan tujuannya selalu `spse.inaproc.id`. Kalau alamat di
+  `buka_url` salah (mis. `http://` di belakang proxy), set `SPSE_PUBLIC_URL`.
 - Satu `list.json` per instansi/tahun/tipe dikunci per job, jadi dua job untuk
   data yang sama berjalan bergantian, bukan bersamaan.
 - HTML detail paket di-cache di `output/<slug>/<tahun>/<tipe>/html/` dan

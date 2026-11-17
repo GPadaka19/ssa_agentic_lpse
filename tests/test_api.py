@@ -133,6 +133,7 @@ def test_job_lifecycle(client):
     assert gedung["jumlah_peserta"] == 2
     assert [p["nama"] for p in gedung["peserta"]] == ["PT Beton Jaya", "PT Baja Abadi"]
     assert jalan["nama_disamarkan"] is True and jalan["peserta"] == []
+    assert gedung["buka_url"] == "http://testserver/spse/pu/lelang/1/pengumumanlelang"
 
     hit = client.get(f"/jobs/{job['id']}/packages", params={"q": "baja"}).json()
     assert hit["total"] == 1
@@ -161,6 +162,32 @@ def test_offline_job_skips_network(client, tmp_path, monkeypatch):
         "konstruksi": {"jenis": "pekerjaan"}}).json()["id"])
     assert job["status"] == "done", job
     assert job["result"]["paket"] == 2
+
+
+def test_spse_bounce_page(tmp_path, network):
+    with TestClient(create_app(root=tmp_path, api_key="rahasia")) as c:
+        # No API key needed: links are clicked from Excel / chat.
+        resp = c.get("/spse/pu/lelang/10181495000/pengumumanlelang")
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers["content-type"]
+        target = "https://spse.inaproc.id/pu/lelang/10181495000/pengumumanlelang"
+        assert f'window.location.replace("{target}")' in resp.text
+        assert 'content="origin"' in resp.text
+        # Query strings (pencatatan / darurat links) survive.
+        resp = c.get("/spse/pu/pencatatan/pengumumannonspk?id=123")
+        assert "pengumumannonspk?id=123" in resp.text
+        # The target host is fixed; a path cannot point the browser elsewhere.
+        resp = c.get("/spse//evil.example/x")
+        assert 'replace("https://spse.inaproc.id/' in resp.text
+        assert '"https://evil' not in resp.text
+
+
+def test_buka_url_in_results(client):
+    body = client.post("/preview", json={"agency": "pu", "max_items": 1,
+                                         "urut": "asli"}).json()
+    pkg = body["packages"][0]
+    assert pkg["sumber_url"] == "https://spse.inaproc.id/pu/lelang/1/pengumumanlelang"
+    assert pkg["buka_url"] == "http://testserver/spse/pu/lelang/1/pengumumanlelang"
 
 
 def test_api_key(tmp_path, network):

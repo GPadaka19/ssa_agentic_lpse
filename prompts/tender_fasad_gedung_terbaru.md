@@ -96,8 +96,8 @@ relevan).
 
 **Tabel tender terbaru** (maks {{JUMLAH}} baris, terbaru di atas):
 
-| No | Kelompok | Kode | Nama paket | Instansi / LPSE | Pagu | HPS | Lokasi | Tahap | Peserta |
-|---|---|---|---|---|---|---|---|---|---|
+| No | Kelompok | Kode | Nama paket | Instansi / LPSE | Pagu | HPS | Lokasi | Tahap | Peserta | Link |
+|---|---|---|---|---|---|---|---|---|---|---|
 
 - Pagu dan HPS dalam format Rp166,3 M. Kosongkan HPS / Lokasi / Peserta kalau
   paket itu tidak masuk langkah 4.
@@ -111,9 +111,8 @@ relevan).
 - Waktu pengambilan data (tanggal dan jam).
 - Nama peserta belum dibuka SPSE selama tender berjalan; jangan sebutkan
   "Peserta 1", "Peserta 2" sebagai nama perusahaan.
-- Link `sumber_url` tidak bisa dibuka langsung dari luar SPSE ("Akses
-  Ditolak"); untuk membuka paket, cari kodenya di halaman daftar tender SPSE
-  instansi tersebut.
+- Kolom Link berisi `buka_url` dari hasil API (jangan `sumber_url`, karena
+  link asli SPSE menampilkan "Akses Ditolak" kalau diklik dari luar SPSE).
 
 Jangan mengarang paket, angka, atau nama perusahaan yang tidak ada di hasil
 API. Kalau ada yang tidak pasti, tulis "belum tersedia".

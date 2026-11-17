@@ -110,7 +110,8 @@ baru tidak terlihat. Untuk tahun yang sudah lewat boleh `false`.
 
 Jawaban: `total` (semua paket instansi itu), `matched` (lolos filter),
 `packages` (maks `max_items`; isi `0` kalau hanya butuh jumlah, maks 5000).
-Setiap paket: `kode`, `nama`, `instansi`, `jenis`, `pagu` (teks singkat,
+Setiap paket: `kode`, `nama`, `instansi`, `jenis`, `buka_url` (link paket
+yang bisa diklik), `sumber_url` (link asli SPSE), `pagu` (teks singkat,
 mis. "143,8 M"), `pagu_num` (perkiraan dari teks singkat itu), `status`
 (tahap saat ini, mis. "Penetapan Pemenang") dan `status_grup` (`berjalan`,
 `selesai`, `batal`).
@@ -140,7 +141,7 @@ Parameter: `q` (cari di nama paket, satker, nama peserta), `urut`
 (`terbaru` = tanggal pembuatan terbaru dulu, `pagu`, `asli`), `offset`,
 `limit` (maks 1000). Setiap paket berisi: `kode_paket`, `nama_paket`, `instansi`,
 `satuan_kerja`, `jenis_pengadaan`, `metode_pengadaan`, `pagu_num`, `hps_num`,
-`lokasi`, `sumber_dana`, `tanggal_pembuatan`, `sumber_url`, `jumlah_peserta`,
+`lokasi`, `sumber_dana`, `tanggal_pembuatan`, `sumber_url`, `buka_url`, `jumlah_peserta`,
 `nama_disamarkan`, `peserta` (daftar `nama`, `npwp`, `harga_kontrak_num`).
 
 ## 5. Alur kerja standar
@@ -186,9 +187,12 @@ Parameter: `q` (cari di nama paket, satker, nama peserta), `urut`
 - **Paket berstatus batal/gagal ikut terhitung.** Nama paket bisa memuat
   "Tender Batal", "Tender Ulang", "Seleksi Gagal". Sebutkan atau pisahkan.
 - **Satu paket bisa muncul dua kali** (tender ulang dengan kode berbeda).
-- **`sumber_url` tidak bisa dibuka langsung** dari Excel atau address bar
-  ("Akses Ditolak"), karena SPSE mewajibkan header Referer. Sarankan membuka
-  halaman daftar SPSE instansi itu lalu cari kode paketnya.
+- **Saat memberi link paket, selalu pakai `buka_url`, bukan `sumber_url`.**
+  `sumber_url` (link asli SPSE) menampilkan "Akses Ditolak" kalau diklik dari
+  chat, email, atau Excel. `buka_url` lewat API ini dan terbuka normal. Kalau
+  hanya punya `sumber_url` (mis. dari file Excel), ganti
+  `https://spse.inaproc.id/` dengan
+  `https://ssa-agentic-lpse.cgk.apps.skalo.cloud/spse/`.
 - **Jangan menjalankan job besar berulang-ulang.** Maksimal 2 job berjalan
   bersamaan; sisanya antre. Pakai ulang job yang sudah `done` (`GET /jobs`)
   kalau filternya sama dan datanya masih relevan.

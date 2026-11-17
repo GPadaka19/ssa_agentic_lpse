@@ -7,10 +7,14 @@ Environment:
   SPSE_OUTPUT        output root (default: output)
   SPSE_API_KEY       if set, every endpoint except /health needs X-API-Key
   SPSE_MAX_JOBS      concurrent scrape jobs (default: 2)
+  SPSE_PUBLIC_URL    public base URL used in buka_url links (default: taken
+                     from the request, honouring X-Forwarded-* headers)
 """
 from __future__ import annotations
 
 import csv
+import html
+import json
 import os
 import re
 import secrets
@@ -19,8 +23,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Body, Depends, FastAPI, HTTPException, Query, Security
-from fastapi.responses import FileResponse
+from fastapi import (APIRouter, Body, Depends, FastAPI, HTTPException, Query, Request,
+                     Security)
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field, field_validator
 
@@ -204,6 +209,45 @@ def summarize_csv(path: Path) -> list[dict]:
     return list(packages.values())
 
 
+# -- SPSE link bounce -------------------------------------------------------------
+SPSE_ORIGIN = "https://spse.inaproc.id"
+
+# SPSE answers "Akses Ditolak" to any detail page requested without a Referer
+# header, which is exactly what a click from Excel, a chat message or the
+# address bar sends. A 302 would not help: browsers keep the (empty) original
+# Referer across redirects. A page that navigates with JavaScript, however,
+# makes the browser send this page's origin as Referer, which SPSE accepts.
+BOUNCE_PAGE = """<!doctype html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="referrer" content="origin">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Membuka SPSE</title>
+<style>body{{font-family:system-ui,sans-serif;margin:3rem auto;max-width:40rem;
+padding:0 1rem;color:#222}}a{{color:#0b57d0;word-break:break-all}}</style>
+</head><body>
+<p>Membuka halaman SPSE...</p>
+<p>Kalau tidak terbuka otomatis, klik: <a href="{href}">{href}</a></p>
+<script>window.location.replace({target});</script>
+</body></html>
+"""
+
+
+def spse_target(path: str, query: str = "") -> str:
+    target = f"{SPSE_ORIGIN}/{path.lstrip('/')}"
+    return f"{target}?{query}" if query else target
+
+
+def public_base(request: Request) -> str:
+    return (os.environ.get("SPSE_PUBLIC_URL") or str(request.base_url)).rstrip("/")
+
+
+def buka_url(request: Request, sumber_url: str | None) -> str | None:
+    """https://spse.inaproc.id/x -> <this api>/spse/x (opens with a Referer)."""
+    if not sumber_url or not sumber_url.startswith(SPSE_ORIGIN + "/"):
+        return None
+    return public_base(request) + "/spse/" + sumber_url[len(SPSE_ORIGIN) + 1:]
+
+
 # -- job runner --------------------------------------------------------------------
 def make_runner(root: Path, agencies: list[dict], manager: JobManager):
     def runner(params: dict, log, progress, cancel) -> dict:
@@ -279,6 +323,19 @@ def create_app(root: Path | str | None = None, api_key: str | None = None,
     def health() -> dict:
         return {"status": "ok"}
 
+    @app.get("/spse/{path:path}", tags=["tautan"], response_class=HTMLResponse)
+    def buka_spse(path: str, request: Request) -> HTMLResponse:
+        """Buka halaman SPSE dengan Referer, supaya tidak "Akses Ditolak".
+
+        Ganti `https://spse.inaproc.id/` di link paket dengan
+        `<alamat api>/spse/`. Tanpa API key, supaya bisa diklik dari Excel atau
+        chat; tujuannya selalu spse.inaproc.id, jadi tidak bisa dipakai untuk
+        mengalihkan ke situs lain."""
+        target = spse_target(path, request.url.query)
+        return HTMLResponse(BOUNCE_PAGE.format(
+            href=html.escape(target, quote=True),
+            target=json.dumps(target).replace("</", "<\\/")))
+
     r = APIRouter(dependencies=[Depends(require_key)])
 
     @r.get("/categories", tags=["meta"])
@@ -305,7 +362,8 @@ def create_app(root: Path | str | None = None, api_key: str | None = None,
         return _agency_out(agency)
 
     @r.post("/preview", tags=["scrape"])
-    def preview(req: Annotated[PreviewRequest, Body(openapi_examples=PREVIEW_EXAMPLES)]) -> dict:
+    def preview(req: Annotated[PreviewRequest, Body(openapi_examples=PREVIEW_EXAMPLES)],
+                request: Request) -> dict:
         """Hitung dan tampilkan paket tanpa mengunduh detail (cepat)."""
         agency, tahun = _resolve(agencies, req)
         slug = agency["slug"]
@@ -319,10 +377,16 @@ def create_app(root: Path | str | None = None, api_key: str | None = None,
             min_pagu=f.min_pagu if f else 0, kata=f.kata if f else None,
             status=req.status)
         matched = konstruksi.sort_rows(matched, req.tipe, req.urut)
+
+        def with_links(pkg: dict) -> dict:
+            pkg["sumber_url"] = spse.entry_tab_url(agency["base"], req.tipe, pkg["kode"])
+            pkg["buka_url"] = buka_url(request, pkg["sumber_url"])
+            return pkg
+
         return {
             "agency": _agency_out(agency), "tipe": req.tipe, "tahun": tahun,
             "total": len(rows), "matched": len(matched),
-            "packages": [konstruksi.row_summary(row, req.tipe)
+            "packages": [with_links(konstruksi.row_summary(row, req.tipe))
                          for row in matched[:req.max_items]],
         }
 
@@ -366,7 +430,7 @@ def create_app(root: Path | str | None = None, api_key: str | None = None,
         return FileResponse(path, filename=path.name)
 
     @r.get("/jobs/{job_id}/packages", tags=["jobs"])
-    def packages(job_id: str,
+    def packages(job_id: str, request: Request,
                  q: str | None = Query(None, description="Cari di nama paket / satker / peserta"),
                  urut: Urut = Query("terbaru", description="terbaru = tanggal pembuatan "
                                     "terbaru dulu; pagu = pagu terbesar dulu; asli = urutan file"),
@@ -384,8 +448,10 @@ def create_app(root: Path | str | None = None, api_key: str | None = None,
             items = [p for p in items if needle in " ".join(
                 [p["nama_paket"] or "", p["satuan_kerja"] or "",
                  *(x["nama"] for x in p["peserta"])]).lower()]
-        return {"total": len(items), "offset": offset,
-                "items": items[offset:offset + limit]}
+        page = items[offset:offset + limit]
+        for p in page:
+            p["buka_url"] = buka_url(request, p["sumber_url"])
+        return {"total": len(items), "offset": offset, "items": page}
 
     app.include_router(r)
     return app
