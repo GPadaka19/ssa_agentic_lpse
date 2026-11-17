@@ -159,6 +159,39 @@ def test_api_key(tmp_path, network):
         assert c.get("/categories", headers={"X-API-Key": "rahasia"}).status_code == 200
 
 
+def test_swagger_examples_are_valid(client):
+    # Every dropdown example in /docs must pass validation as-is.
+    from api.main import JOB_EXAMPLES, PREVIEW_EXAMPLES, JobRequest, PreviewRequest
+    for ex in PREVIEW_EXAMPLES.values():
+        PreviewRequest(**ex["value"])
+    for ex in JOB_EXAMPLES.values():
+        JobRequest(**ex["value"])
+    spec = client.get("/openapi.json").json()
+    body = spec["paths"]["/jobs"]["post"]["requestBody"]["content"]["application/json"]
+    assert "uji_kecil" in body["examples"]
+
+
+def test_cancel_running_job_reports_cancelling(tmp_path):
+    import threading
+    manager = JobManager(tmp_path)
+    started, release = threading.Event(), threading.Event()
+
+    def runner(params, log, progress, cancel):
+        started.set()
+        release.wait(5)
+        return {}
+
+    job = manager.submit({}, runner)
+    assert started.wait(5)
+    assert manager.cancel(job.id).status == "cancelling"
+    release.set()
+    deadline = time.time() + 5
+    while job.status == "cancelling" and time.time() < deadline:
+        time.sleep(0.02)
+    assert job.status == "cancelled"
+    manager.shutdown()
+
+
 def test_running_job_becomes_interrupted_after_restart(tmp_path):
     jobs_dir = tmp_path / "_jobs"
     jobs_dir.mkdir()

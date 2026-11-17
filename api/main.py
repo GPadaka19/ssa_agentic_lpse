@@ -17,9 +17,9 @@ import secrets
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Security
+from fastapi import APIRouter, Body, Depends, FastAPI, HTTPException, Query, Security
 from fastapi.responses import FileResponse
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field, field_validator
@@ -76,6 +76,63 @@ class JobRequest(Target):
                           "sudah ada, tanpa network (= --skip-json --skip-html)")
 
 
+# -- Swagger examples --------------------------------------------------------------
+# Without these, Swagger UI pre-fills every field with placeholders such as
+# "kata": "string", which silently matches nothing. Each entry shows up in the
+# Examples dropdown of /docs.
+PREVIEW_EXAMPLES = {
+    "hitung": {
+        "summary": "Hitung semua paket (= --dry)",
+        "value": {"agency": "jakarta", "tipe": "swakelola", "tahun": 2026},
+    },
+    "konstruksi": {
+        "summary": "Hitung paket konstruksi",
+        "value": {"agency": "pu", "tipe": "tender", "tahun": 2026,
+                  "konstruksi": {"jenis": "semua"}},
+    },
+    "kontraktor_besar": {
+        "summary": "Pekerjaan fisik, pagu >= Rp50 M",
+        "value": {"agency": "pu", "tipe": "tender", "tahun": 2026,
+                  "konstruksi": {"jenis": "pekerjaan", "min_pagu": 50}},
+    },
+    "kata_kunci": {
+        "summary": "Kata kunci: gedung / fasad, ambil ulang dari server",
+        "value": {"agency": "pu", "tipe": "tender", "tahun": 2026,
+                  "konstruksi": {"kata": "gedung|fasad"}, "refresh": True},
+    },
+}
+
+JOB_EXAMPLES = {
+    "uji_kecil": {
+        "summary": "Uji kecil: 5 paket (= --limit 5)",
+        "value": {"agency": "kemkes", "tipe": "tender", "tahun": 2025, "limit": 5},
+    },
+    "lengkap": {
+        "summary": "Scrape lengkap semua paket",
+        "value": {"agency": "kemkes", "tipe": "tender", "tahun": 2025},
+    },
+    "konstruksi_gedung": {
+        "summary": "Konstruksi: gedung, pekerjaan fisik",
+        "value": {"agency": "pu", "tipe": "tender", "tahun": 2025,
+                  "konstruksi": {"jenis": "pekerjaan", "kata": "gedung"}},
+    },
+    "konsultan": {
+        "summary": "Konstruksi: peluang konsultan",
+        "value": {"agency": "pu", "tipe": "tender", "tahun": 2025,
+                  "konstruksi": {"jenis": "konsultansi"}},
+    },
+    "nontender_pemda": {
+        "summary": "Pengadaan langsung konstruksi di pemda",
+        "value": {"agency": "jatimprov", "tipe": "nontender", "tahun": 2025,
+                  "konstruksi": {"jenis": "pekerjaan"}},
+    },
+    "offline": {
+        "summary": "Export ulang tanpa network",
+        "value": {"agency": "kemkes", "tipe": "tender", "tahun": 2025, "offline": True},
+    },
+}
+
+
 # -- helpers -----------------------------------------------------------------------
 def _resolve(agencies: list[dict], target: Target) -> tuple[dict, int]:
     agency = spse.match_agency(agencies, target.agency)
@@ -83,7 +140,8 @@ def _resolve(agencies: list[dict], target: Target) -> tuple[dict, int]:
         raise HTTPException(404, f"Instansi '{target.agency}' tidak ditemukan")
     if target.konstruksi and target.tipe not in konstruksi.FILTERABLE:
         raise HTTPException(422, f"Filter konstruksi tidak tersedia untuk tipe "
-                                 f"'{target.tipe}' (hanya {', '.join(konstruksi.FILTERABLE)})")
+                                 f"'{target.tipe}' (hanya {', '.join(konstruksi.FILTERABLE)}). "
+                                 f"Hapus field 'konstruksi' atau isi null.")
     return agency, spse.resolve_tahun(target.tahun)
 
 
@@ -238,7 +296,7 @@ def create_app(root: Path | str | None = None, api_key: str | None = None,
         return _agency_out(agency)
 
     @r.post("/preview", tags=["scrape"])
-    def preview(req: PreviewRequest) -> dict:
+    def preview(req: Annotated[PreviewRequest, Body(openapi_examples=PREVIEW_EXAMPLES)]) -> dict:
         """Hitung dan tampilkan paket tanpa mengunduh detail (cepat)."""
         agency, tahun = _resolve(agencies, req)
         slug = agency["slug"]
@@ -258,7 +316,7 @@ def create_app(root: Path | str | None = None, api_key: str | None = None,
         }
 
     @r.post("/jobs", status_code=202, tags=["jobs"])
-    def create_job(req: JobRequest) -> dict:
+    def create_job(req: Annotated[JobRequest, Body(openapi_examples=JOB_EXAMPLES)]) -> dict:
         """Mulai scrape di background. Pantau lewat GET /jobs/{id}."""
         agency, tahun = _resolve(agencies, req)
         params = req.model_dump()

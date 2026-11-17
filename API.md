@@ -41,6 +41,11 @@ request dari halaman itu otomatis membawa header `X-API-Key`.
 
 ## Endpoint
 
+Di `/docs`, endpoint `POST /preview` dan `POST /jobs` punya dropdown
+**Examples** berisi body siap pakai. Pilih salah satu, ubah seperlunya, lalu
+Execute. Jangan biarkan nilai placeholder seperti `"kata": "string"`, karena
+itu menyaring paket yang namanya mengandung kata "string" (hasilnya 0).
+
 | Method | Path | Fungsi |
 |---|---|---|
 | GET | `/`, `/health` | Cek server hidup (tanpa API key) |
@@ -90,7 +95,10 @@ request dari halaman itu otomatis membawa header `X-API-Key`.
 
 ### Status job
 
-`queued` -> `running` -> `done` | `failed` | `cancelled`. Job yang sedang
+`queued` -> `running` -> `done` | `failed` | `cancelled`. Setelah
+`POST /jobs/{id}/cancel`, job yang sedang berjalan berstatus `cancelling` sampai
+request yang sedang berjalan selesai (bisa sampai sekitar 1 menit kalau server
+SPSE lambat), lalu menjadi `cancelled`. Job yang sedang
 berjalan saat server mati muncul sebagai `interrupted` setelah restart; kirim
 ulang request yang sama dan scrape lanjut dari cache HTML.
 

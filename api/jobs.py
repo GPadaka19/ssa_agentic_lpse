@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable
 
-ACTIVE = ("queued", "running")
+ACTIVE = ("queued", "running", "cancelling")
 LOG_KEEP = 500
 
 
@@ -133,7 +133,11 @@ class JobManager:
             if job.status == "queued":
                 job.status = "cancelled"
                 job.finished_at = _now()
-            job.log.append("pembatalan diminta")
+            elif job.status == "running":
+                # Requests already in flight must finish (or time out, up to
+                # ~60 s) before the worker stops; show that it was heard.
+                job.status = "cancelling"
+            job.log.append("pembatalan diminta, menunggu request yang sedang berjalan")
             self._persist(job)
         return job
 
