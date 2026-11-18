@@ -20,11 +20,10 @@ Prinsip:
 ## 2. Koneksi
 
 - Base URL: `https://data-spse.latindo.ai`
-- Akses: tanpa API key. Server hanya menerima request dari IP yang ada di
-  whitelist; pastikan Anda berjalan dari server/jaringan yang sudah
-  didaftarkan. Cek dengan `GET /whoami` (`"diizinkan": true`).
+- Tanpa API key dan tanpa header autentikasi; langsung panggil endpoint-nya.
 - Body request berupa JSON: `Content-Type: application/json`.
-- Spesifikasi lengkap (OpenAPI): `GET /openapi.json`.
+- Spesifikasi lengkap (OpenAPI): `GET /openapi.json`; versi interaktif di
+  `/docs`.
 
 Cek koneksi: `GET /health` harus menjawab `{"status":"ok"}`.
 
@@ -91,15 +90,21 @@ baru tidak terlihat. Untuk tahun yang sudah lewat boleh `false`.
 
 | Kebutuhan | Endpoint | Waktu |
 |---|---|---|
-| Cari slug instansi | `GET /agencies?q=<kata>` | instan |
+| Cek server hidup | `GET /health` -> `{"status":"ok"}` | instan |
+| Daftar tipe dan apakah filter konstruksi tersedia | `GET /categories` | instan |
+| Cari slug instansi | `GET /agencies?q=<kata>&limit=50` | instan |
 | Pastikan satu instansi | `GET /agencies/<slug-atau-nama>` | instan |
-| Hitung + daftar paket (kode, nama, pagu, jenis) | `POST /preview` | detik |
+| Hitung + daftar paket (kode, nama, pagu, jenis, status) | `POST /preview` | detik |
 | Ambil detail lengkap (HPS, lokasi, satker, peserta, pemenang) | `POST /jobs` | menit-jam |
-| Pantau job | `GET /jobs/<id>` | instan |
-| Hasil job dalam JSON | `GET /jobs/<id>/packages` | instan |
-| File Excel / CSV | `GET /jobs/<id>/download/xlsx` atau `/csv` | instan |
-| Batalkan job | `POST /jobs/<id>/cancel` | |
 | Lihat semua job | `GET /jobs` atau `GET /jobs?status=done` | instan |
+| Pantau job (status, progres, hasil, log) | `GET /jobs/<id>?log=50` | instan |
+| Batalkan job | `POST /jobs/<id>/cancel` | instan |
+| Hasil job dalam JSON | `GET /jobs/<id>/packages?q=&urut=&offset=&limit=` | instan |
+| File Excel / CSV | `GET /jobs/<id>/download/xlsx` atau `/download/csv` | instan |
+| Buka halaman paket SPSE tanpa "Akses Ditolak" | `GET /spse/<path SPSE>` (ini yang dipakai `buka_url`) | detik |
+
+`GET /agencies` menjawab `{"total", "items": [...]}`; `GET /categories`
+menjawab daftar `{"tipe", "label", "filter_konstruksi"}`.
 
 ### POST /preview
 
@@ -206,7 +211,9 @@ Parameter: `q` (cari di nama paket, satker, nama peserta), `urut`
 
 | Respons | Arti | Tindakan |
 |---|---|---|
-| 403 "IP ... tidak diizinkan" | IP Anda tidak ada di whitelist | Laporkan IP dari `GET /whoami` ke admin; jangan mencoba lewat jalur lain |
+| 403 | Server menolak akses | Laporkan ke admin beserta pesan `detail`; jangan mencoba lewat jalur lain |
+| 404 "Job tidak ditemukan" | `id` job salah atau sudah dihapus | Cek `GET /jobs` |
+| 404 "File ... belum tersedia" | Job belum `done` | Tunggu, pantau `GET /jobs/<id>` |
 | 404 "Instansi ... tidak ditemukan" | Slug/nama tidak cocok | `GET /agencies?q=` dengan kata lebih pendek |
 | 422 "Filter konstruksi tidak tersedia ..." | Filter dipakai di `swakelola` | Hilangkan field `konstruksi` |
 | 422 "regex tidak valid" | Pola `kata` rusak | Perbaiki, mis. escape tanda kurung |

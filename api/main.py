@@ -340,18 +340,18 @@ def create_app(root: Path | str | None = None, allowed_ips: str | None = None,
 
     @app.get("/whoami", tags=["meta"])
     def whoami(request: Request) -> dict:
-        """IP Anda menurut server dan apakah masuk whitelist. Pakai untuk
-        mengecek SPSE_ALLOWED_IPS / SPSE_PROXY_HOPS setelah deploy."""
+        """Your IP as the server sees it and whether it is whitelisted. Use it
+        to check SPSE_ALLOWED_IPS / SPSE_PROXY_HOPS after a deploy."""
         peer = request.client.host if request.client else None
         ip = access.client_ip(peer, request.headers)
-        return {"ip": ip, "diizinkan": access.allows(ip),
-                "whitelist_aktif": access.enabled, "peer": peer,
+        return {"ip": ip, "allowed": access.allows(ip),
+                "whitelist_enabled": access.enabled, "peer": peer,
                 "x_forwarded_for": request.headers.get("x-forwarded-for")}
 
     @app.get("/", tags=["meta"])
     def index() -> dict:  # not "root": that name is the output folder here
-        return {"message": "What the hell are you doing here? There's nothing "
-                           "for you. Get lost."}
+        # Looks like FastAPI's own 404 body, but answers 200 on purpose.
+        return {"detail": "Not Found"}
 
     @app.get("/health", tags=["meta"])
     def health() -> dict:

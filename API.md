@@ -47,7 +47,8 @@ SPSE_PROXY_HOPS=1
 - Selalu terbuka untuk semua IP: `/`, `/health`, `/whoami`, dan `/spse/...`
   (link paket yang diklik dari Excel atau chat; tujuannya hanya
   `spse.inaproc.id`).
-- `GET /whoami` menampilkan IP Anda menurut server dan apakah diizinkan.
+- `GET /whoami` menampilkan IP Anda menurut server dan apakah diizinkan
+  (`ip`, `allowed`, `whitelist_enabled`, `peer`, `x_forwarded_for`).
   Pakai ini setelah deploy untuk memastikan IP terbaca benar.
 - IP klien diambil dari ujung kanan `X-Forwarded-For` (bagian yang ditambahkan
   proxy), bukan ujung kiri yang bisa dipalsukan pengirim. Kalau `/whoami`
@@ -70,7 +71,7 @@ itu menyaring paket yang namanya mengandung kata "string" (hasilnya 0).
 | Method | Path | Fungsi |
 |---|---|---|
 | GET | `/health` | Cek server hidup, `{"status":"ok"}` (terbuka untuk semua IP) |
-| GET | `/` | Pesan pengusir untuk pengunjung iseng (terbuka untuk semua IP) |
+| GET | `/` | Menyamar sebagai 404: body `{"detail":"Not Found"}` tapi status 200 (terbuka untuk semua IP) |
 | GET | `/whoami` | IP Anda menurut server dan status whitelist (terbuka untuk semua IP) |
 | GET | `/spse/<path SPSE>` | Buka halaman paket SPSE tanpa "Akses Ditolak" (terbuka untuk semua IP) |
 | GET | `/categories` | Daftar tipe dan apakah filter konstruksi tersedia |

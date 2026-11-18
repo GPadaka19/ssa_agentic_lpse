@@ -74,7 +74,8 @@ def wait_job(client, job_id, timeout=5):
 
 def test_health_and_meta(client):
     assert client.get("/health").json() == {"status": "ok"}
-    assert "Get lost" in client.get("/").json()["message"]
+    resp = client.get("/")
+    assert resp.status_code == 200 and resp.json() == {"detail": "Not Found"}
     tipes = {c["tipe"]: c["filter_konstruksi"] for c in client.get("/categories").json()}
     assert tipes["tender"] is True and tipes["swakelola"] is False
 
@@ -223,7 +224,7 @@ def test_forged_forwarded_for_is_ignored(tmp_path, network):
         forged = {"X-Forwarded-For": "34.50.127.37, 8.8.8.8"}
         assert c.get("/categories", headers=forged).status_code == 403
         who = c.get("/whoami", headers=forged).json()
-        assert who["ip"] == "8.8.8.8" and who["diizinkan"] is False
+        assert who["ip"] == "8.8.8.8" and who["allowed"] is False
         # No forwarding header: the direct peer (TestClient's "testclient") is
         # not an IP, so it is refused rather than waved through.
         assert c.get("/categories").status_code == 403
@@ -243,7 +244,7 @@ def test_proxy_hops_and_client_ip_header(tmp_path, network):
 
 def test_whitelist_disabled_allows_all(client):
     assert client.get("/categories", headers=via_proxy("8.8.8.8")).status_code == 200
-    assert client.get("/whoami").json()["whitelist_aktif"] is False
+    assert client.get("/whoami").json()["whitelist_enabled"] is False
 
 
 def test_invalid_whitelist_entry_fails_fast(tmp_path):
