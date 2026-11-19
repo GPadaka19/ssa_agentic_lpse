@@ -321,6 +321,10 @@ def create_app(root: Path | str | None = None, allowed_ips: str | None = None,
                     "swakelola, darurat) per instansi dan tahun, dengan filter "
                     "paket konstruksi. Scrape berjalan sebagai job di background.",
         lifespan=lifespan,
+        # Swagger UI and ReDoc, both behind the IP whitelist like every non-public path.
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
     )
     app.state.manager = manager
 

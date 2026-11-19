@@ -205,11 +205,14 @@ def test_ip_whitelist(tmp_path, network):
         # Public paths stay open to anyone.
         for path in ("/", "/health", "/whoami", "/spse/pu/lelang/1/pengumumanlelang"):
             assert c.get(path, headers=via_proxy("8.8.8.8")).status_code == 200, path
-        # Everything else, /docs included, needs a whitelisted IP.
-        for path in ("/categories", "/jobs", "/docs", "/openapi.json"):
+        # Everything else, the docs (Swagger, ReDoc, the spec) included, needs a whitelisted IP.
+        for path in ("/categories", "/jobs", "/docs", "/redoc", "/openapi.json"):
             resp = c.get(path, headers=via_proxy("8.8.8.8"))
             assert resp.status_code == 403, path
             assert "8.8.8.8" in resp.json()["detail"]
+        for path in ("/docs", "/redoc", "/openapi.json"):
+            assert c.get(path, headers=via_proxy("34.50.127.37")).status_code == 200, path
+        assert "redoc" in c.get("/redoc", headers=via_proxy("34.50.127.37")).text.lower()
         assert c.get("/categories", headers=via_proxy("34.50.127.37")).status_code == 200
         assert c.get("/categories", headers=via_proxy("100.80.64.57")).status_code == 200
         assert c.get("/categories", headers=via_proxy("10.20.5.6")).status_code == 200  # CIDR
